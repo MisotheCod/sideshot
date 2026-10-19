@@ -34,6 +34,7 @@ final class SelectionOverlayWindow: NSWindow {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)  // selection is an interaction takeover; Esc/keys must reach us
         makeFirstResponder(contentView)
+        NSCursor.crosshair.set()  // crosshair immediately, before any mouse move
     }
 }
 
@@ -55,6 +56,19 @@ final class SelectionView: NSView {
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .crosshair)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if !trackingAreas.contains(where: { $0.options.contains(.cursorUpdate) }) {
+            addTrackingArea(NSTrackingArea(rect: bounds,
+                                           options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                           owner: self, userInfo: nil))
+        }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.crosshair.set()
     }
 
     override func mouseDown(with event: NSEvent) {
