@@ -5,7 +5,7 @@ import SwiftUI
 
 final class OnboardingWindow: NSWindow {
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 736),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 766),
                    styleMask: [.titled, .closable, .fullSizeContentView],
                    backing: .buffered, defer: false)
         isReleasedWhenClosed = false
@@ -14,7 +14,7 @@ final class OnboardingWindow: NSWindow {
         isMovableByWindowBackground = true
         center()
         contentView = NSHostingView(rootView: OnboardingView(onFinish: { [weak self] in self?.finish() }))
-        setContentSize(NSSize(width: 560, height: 736))
+        setContentSize(NSSize(width: 560, height: 766))
     }
 
     func present() {
@@ -88,9 +88,11 @@ struct OnboardingView: View {
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.orange.opacity(0.10)))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+            .padding(.top, 18)
+            .padding(.bottom, 8)
             .padding(.horizontal, 44)
 
-            Spacer(minLength: 22)
+            Spacer(minLength: 26)
 
             Button {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
@@ -111,7 +113,7 @@ struct OnboardingView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 30)
         }
-        .frame(width: 560, height: 736)
+        .frame(width: 560, height: 766)
         .padding(.horizontal, 8)
     }
 }
