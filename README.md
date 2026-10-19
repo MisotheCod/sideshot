@@ -4,6 +4,12 @@ A clean, native-feeling macOS menu-bar app for screenshots and screen recordings
 
 Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkeys. No telemetry, no accounts, no cloud.
 
+## Screenshots
+
+![Sideshot onboarding](docs/screenshots/onboarding.png)
+
+![Sideshot video editor — scrub and trim recordings](docs/screenshots/editor.png)
+
 ## Features
 
 - **Menu-bar app** — no Dock icon; lives in the status bar.

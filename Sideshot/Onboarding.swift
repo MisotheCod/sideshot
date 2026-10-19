@@ -5,7 +5,7 @@ import SwiftUI
 
 final class OnboardingWindow: NSWindow {
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 600),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 736),
                    styleMask: [.titled, .closable, .fullSizeContentView],
                    backing: .buffered, defer: false)
         isReleasedWhenClosed = false
@@ -14,7 +14,7 @@ final class OnboardingWindow: NSWindow {
         isMovableByWindowBackground = true
         center()
         contentView = NSHostingView(rootView: OnboardingView(onFinish: { [weak self] in self?.finish() }))
-        setContentSize(NSSize(width: 560, height: 600))
+        setContentSize(NSSize(width: 560, height: 736))
     }
 
     func present() {
@@ -66,7 +66,31 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 44)
 
-            Spacer(minLength: 26)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.orange)
+                    Text("Turn off macOS's screenshot shortcuts")
+                        .font(.body.weight(.semibold))
+                }
+                Text("⌘⇧3, ⌘⇧4 and ⌘⇧5 are already used by the built-in screenshot tool. Open Keyboard Shortcuts → Screenshots and untick all three so Sideshot's hotkeys take over.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard")!)
+                } label: {
+                    Label("Open Keyboard Shortcuts", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.orange.opacity(0.10)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+            .padding(.horizontal, 44)
+
+            Spacer(minLength: 22)
 
             Button {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
@@ -87,7 +111,7 @@ struct OnboardingView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 30)
         }
-        .frame(width: 560, height: 600)
+        .frame(width: 560, height: 736)
         .padding(.horizontal, 8)
     }
 }
