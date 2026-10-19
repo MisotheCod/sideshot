@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Build outputs (built app, not source)
+Sideshot.app/
+build/
+*.zip
