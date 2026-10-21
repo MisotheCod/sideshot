@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingSelection = false
     private var recordIndicator: RecordIndicator?
     private var onboardingWindow: OnboardingWindow?
+    private var previewWindow: PreviewWindow?
     private var videoEditorWindows: [VideoEditorWindow] = []
     private var recordModePanel: RecordModePanel?
     private var windowSelectionWindow: NSWindow?
@@ -175,7 +176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onSave: { [weak self] item in self?.saveItem(item) },
             onEdit: { [weak self] item in self?.editItem(item) },
             onRemove: { [weak self] item in self?.removeItem(item) },
-            onDragOut: { [weak self] item in self?.dragOutItem(item) }
+            onDragOut: { [weak self] item in self?.dragOutItem(item) },
+            onPreview: { [weak self] item in self?.previewItem(item) }
         )
     }
 
@@ -222,6 +224,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func editItem(_ item: CaptureItem) {
         guard let url = item.videoURL else { return }
         openVideoEditor(for: url)
+    }
+
+    /// Double-click a card: recordings open the trim editor, screenshots open a big preview.
+    private func previewItem(_ item: CaptureItem) {
+        if item.isVideo, let url = item.videoURL {
+            openVideoEditor(for: url)
+            return
+        }
+        previewWindow?.close()
+        let w = PreviewWindow(image: item.image)
+        previewWindow = w
+        w.show()
     }
 
     /// Remove a card: discard any unsaved recording. (Drag temp files are left in place

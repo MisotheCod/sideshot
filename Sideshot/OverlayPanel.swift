@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import QuartzCore
 
 // MARK: - Model
 
@@ -45,6 +46,7 @@ struct CardActions {
     let onEdit: (CaptureItem) -> Void
     let onRemove: (CaptureItem) -> Void
     let onDragOut: (CaptureItem) -> Void
+    let onPreview: (CaptureItem) -> Void
 }
 
 final class ThumbnailManager {
@@ -69,11 +71,22 @@ final class ThumbnailManager {
     }
 
     func remove(_ item: CaptureItem) {
-        if let idx = entries.firstIndex(where: { $0.item === item }) {
-            entries[idx].window.orderOut(nil)
-            entries.remove(at: idx)
-        }
+        guard let idx = entries.firstIndex(where: { $0.item === item }) else { return }
+        let window = entries[idx].window
+        entries.remove(at: idx)
         reflow()
+        // slide the card off the left edge, out of sight
+        let target = NSRect(x: window.frame.minX - window.frame.width - 60,
+                            y: window.frame.minY,
+                            width: window.frame.width, height: window.frame.height)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.24
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().setFrame(target, display: true)
+            window.animator().alphaValue = 0
+        } completionHandler: {
+            window.orderOut(nil)
+        }
     }
 
     /// Stack on the left edge, newest at the bottom, older pushed up.
@@ -83,8 +96,13 @@ final class ThumbnailManager {
         for (i, e) in entries.enumerated() {
             let fromBottom = n - 1 - i
             let y = screen.frame.minY + Self.bottom + CGFloat(fromBottom) * (Self.windowHeight + Self.gap)
-            e.window.setFrame(NSRect(x: screen.frame.minX + Self.left, y: y,
-                                    width: Self.windowWidth, height: Self.windowHeight), display: true)
+            let target = NSRect(x: screen.frame.minX + Self.left, y: y,
+                                width: Self.windowWidth, height: Self.windowHeight)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                e.window.animator().setFrame(target, display: true)
+            }
             e.window.orderFrontRegardless()
         }
     }
@@ -182,6 +200,7 @@ struct ThumbnailCardView: View {
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.14), value: hovering)
         .padding(ThumbnailManager.margin)
+        .onTapGesture(count: 2) { actions.onPreview(item) }
         .onDrag {
             guard let url = item.dragURL() else { return NSItemProvider() }
             actions.onDragOut(item)
@@ -217,6 +236,72 @@ struct PressableStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Big preview (double-click a card)
+
+final class PreviewWindow: NSPanel {
+    private var keyMonitor: Any?
+
+    init(image: NSImage) {
+        let screen = NSScreen.main ?? NSScreen.screens.first!
+        let maxSize = NSSize(width: screen.frame.width * 0.78, height: screen.frame.height * 0.78)
+        let size = PreviewWindow.fit(image.size, within: maxSize)
+
+        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
+                   backing: .buffered, defer: false)
+        isFloatingPanel = true
+        level = .floating
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        hidesOnDeactivate = false
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        isReleasedWhenClosed = false
+
+        contentView = NSHostingView(rootView: PreviewView(image: image, onDismiss: { [weak self] in self?.close() }))
+        center()
+    }
+
+    func show() {
+        makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { self?.close(); return nil }
+            return event
+        }
+    }
+
+    override func close() {
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
+        super.close()
+    }
+
+    static func fit(_ s: NSSize, within limit: NSSize) -> NSSize {
+        guard s.width > 0, s.height > 0 else { return limit }
+        let scale = min(limit.width / s.width, limit.height / s.height)
+        return NSSize(width: max(120, s.width * scale), height: max(80, s.height * scale))
+    }
+
+    override var canBecomeKey: Bool { true }
+}
+
+struct PreviewView: View {
+    let image: NSImage
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .background(Color.black.opacity(0.55))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1))
+            .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+            .contentShape(Rectangle())
+            .onTapGesture { onDismiss() }
     }
 }
 
