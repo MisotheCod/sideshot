@@ -50,7 +50,15 @@ final class CaptureEngine {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = matchDisplay(screen, in: content.displays) else { throw CaptureError.displayNotFound }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let filter: SCContentFilter
+        if let myBundle = Bundle.main.bundleIdentifier {
+            // Never capture Sideshot's own floating UI (side-stack cards, overlays) —
+            // otherwise a new screenshot would show the ones already on screen.
+            let myWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == myBundle }
+            filter = SCContentFilter(display: display, excludingWindows: myWindows)
+        } else {
+            filter = SCContentFilter(display: display, excludingWindows: [])
+        }
         let scale = screen.backingScaleFactor
         var config = SCStreamConfiguration()
         config.width = Int(display.width) * Int(scale)
