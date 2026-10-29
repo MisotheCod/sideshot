@@ -54,6 +54,22 @@ let annotationPalette: [(name: String, color: Color)] = [
     ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("White", .white),
 ]
 
+extension Annotation {
+    /// Bounding box (image space) used for hit-testing — padded at the call site.
+    var boundingRect: CGRect {
+        if let r = rect { return r }
+        if tool == .text, let p = points.first {
+            let w = max(48, CGFloat(text.count) * 16)
+            return CGRect(x: p.x - w / 2, y: p.y - 22, width: w, height: 44)
+        }
+        guard points.count >= 2 else {
+            return CGRect(origin: points.first ?? .zero, size: CGSize(width: 8, height: 8))
+        }
+        let xs = points.map(\.x), ys = points.map(\.y)
+        return CGRect(x: xs.min()!, y: ys.min()!, width: max(4, xs.max()! - xs.min()!), height: max(4, ys.max()! - ys.min()!))
+    }
+}
+
 // MARK: - Live text (OCR)
 
 struct LiveTextBlock: Identifiable {
@@ -149,6 +165,7 @@ struct AnnotateView: View {
     @State private var liveTextBlocks: [LiveTextBlock] = []
     @State private var shareAnchor: NSView?
     @State private var hoveredBlockID: UUID?
+    @State private var hoveredAnnotationID: UUID?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -189,6 +206,7 @@ struct AnnotateView: View {
                         AnnotationLayer(ann: a, m: m, source: cgImage,
                                         isSelected: selectedID == a.id,
                                         isBeingEdited: editingTextID == a.id,
+                                        isHovered: hoveredAnnotationID == a.id,
                                         onMove: { d in moveAnnotation(a.id, by: d, m: m) },
                                         onEditText: { startEditingText(a) },
                                         onSelect: { selectedID = a.id })
@@ -196,7 +214,8 @@ struct AnnotateView: View {
 
                     if let d = draft {
                         AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
-                                        isBeingEdited: false, onMove: { _ in }, onEditText: {}, onSelect: {})
+                                        isBeingEdited: false, isHovered: false,
+                                        onMove: { _ in }, onEditText: {}, onSelect: {})
                     }
 
                     if let id = editingTextID,
@@ -226,8 +245,12 @@ struct AnnotateView: View {
                     case .active(let loc):
                         let ip = m.toImage(loc)
                         hoveredBlockID = liveTextBlocks.first(where: { $0.rect.contains(ip) })?.id
+                        hoveredAnnotationID = annotations.first(where: {
+                            m.toView($0.boundingRect).insetBy(dx: -12, dy: -12).contains(loc)
+                        })?.id
                     case .ended:
                         hoveredBlockID = nil
+                        hoveredAnnotationID = nil
                     }
                 }
                 .onChange(of: hoveredBlockID) { id in
@@ -558,6 +581,7 @@ struct AnnotationLayer: View {
     let source: CGImage
     let isSelected: Bool
     let isBeingEdited: Bool
+    let isHovered: Bool
     let onMove: (CGSize) -> Void
     let onEditText: () -> Void
     let onSelect: () -> Void
@@ -610,11 +634,23 @@ struct AnnotationLayer: View {
                 }
             }
         }
-        .overlay { if isSelected { selectionHalo } }
-        .contentShape(Rectangle())
-        .gesture(moveGesture)
-        .onTapGesture { onSelect() }
-        .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
+        .overlay { hitSurface }
+        .overlay { if isSelected || isHovered { halo } }
+    }
+
+    private var hitRect: CGRect {
+        m.toView(ann.boundingRect).insetBy(dx: -12, dy: -12)
+    }
+
+    private var hitSurface: some View {
+        let h = hitRect
+        return Color(nsColor: NSColor(deviceWhite: 1, alpha: 0.001))
+            .frame(width: h.width, height: h.height)
+            .position(x: h.midX, y: h.midY)
+            .contentShape(Rectangle())
+            .gesture(moveGesture)
+            .onTapGesture { onSelect() }
+            .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
     }
 
     private var moveGesture: some Gesture {
@@ -629,17 +665,12 @@ struct AnnotationLayer: View {
     }
 
     @ViewBuilder
-    private var selectionHalo: some View {
-        if let r = ann.rect {
-            RoundedRectangle(cornerRadius: 2)
-                .stroke(Color.accentColor.opacity(0.75), lineWidth: 1.5)
-                .frame(width: r.width * m.scale + 14, height: r.height * m.scale + 14)
-                .position(x: m.toView(r).midX, y: m.toView(r).midY)
-        } else if let p = ann.points.first {
-            Circle().stroke(Color.accentColor, lineWidth: 1.5)
-                .frame(width: 14, height: 14)
-                .position(m.toView(p))
-        }
+    private var halo: some View {
+        let r = m.toView(ann.boundingRect)
+        RoundedRectangle(cornerRadius: 2)
+            .stroke(Color.accentColor.opacity(isSelected ? 0.85 : 0.4), lineWidth: isSelected ? 2 : 1.5)
+            .frame(width: max(16, r.width + 10), height: max(16, r.height + 10))
+            .position(x: r.midX, y: r.midY)
     }
 }
 
