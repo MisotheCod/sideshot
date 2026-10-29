@@ -148,6 +148,7 @@ struct AnnotateView: View {
     @FocusState private var textFieldFocused: Bool
     @State private var liveTextBlocks: [LiveTextBlock] = []
     @State private var shareAnchor: NSView?
+    @State private var hoveredBlockID: UUID?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -180,7 +181,8 @@ struct AnnotateView: View {
                         .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
 
                     ForEach(liveTextBlocks) { b in
-                        LiveTextBlockView(block: b, m: m, onTap: { handleLiveTextTap(b) })
+                        LiveTextBlockView(block: b, m: m, isHovering: hoveredBlockID == b.id,
+                                          onTap: { handleLiveTextTap(b) })
                     }
 
                     ForEach(annotations) { a in
@@ -219,6 +221,22 @@ struct AnnotateView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let loc):
+                        let ip = m.toImage(loc)
+                        hoveredBlockID = liveTextBlocks.first(where: { $0.rect.contains(ip) })?.id
+                    case .ended:
+                        hoveredBlockID = nil
+                    }
+                }
+                .onChange(of: hoveredBlockID) { id in
+                    if let id, let b = liveTextBlocks.first(where: { $0.id == id }) {
+                        (b.url != nil ? NSCursor.pointingHand : NSCursor.iBeam).set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
+                }
                 .gesture(drawGesture(m: m), including: (tool == .text || tool == .selector) ? .none : .all)
                 .gesture(SpatialTapGesture().onEnded { v in
                     if tool == .text { handleTextTap(v.location, m: m) }
@@ -762,27 +780,22 @@ struct GlassBackground: View {
 struct LiveTextBlockView: View {
     let block: LiveTextBlock
     let m: Mapping
+    let isHovering: Bool
     let onTap: () -> Void
-
-    @State private var hovering = false
 
     var body: some View {
         let r = m.toView(block.rect)
         ZStack {
-            Rectangle().fill(hovering ? Color.accentColor.opacity(0.4) : Color.clear)
-            if hovering {
+            Rectangle().fill(isHovering ? Color.accentColor.opacity(0.45) : Color(nsColor: NSColor(deviceWhite: 1, alpha: 0.001)))
+            if isHovering {
                 RoundedRectangle(cornerRadius: 2).stroke(Color.white, lineWidth: 2)
             }
         }
         .frame(width: r.width, height: r.height)
         .position(x: r.midX, y: r.midY)
         .contentShape(Rectangle())
-        .onHover { h in
-            hovering = h
-            if h { NSCursor.iBeam.set() }
-        }
         .onTapGesture { onTap() }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 }
 
