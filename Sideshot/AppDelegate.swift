@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingSelection = false
     private var recordIndicator: RecordIndicator?
     private var onboardingWindow: OnboardingWindow?
-    private var previewWindow: PreviewWindow?
+    private var annotateWindow: AnnotateWindow?
     private var videoEditorWindows: [VideoEditorWindow] = []
     private var recordModePanel: RecordModePanel?
     private var windowSelectionWindow: NSWindow?
@@ -35,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !UserDefaults.standard.bool(forKey: "DidShowOnboarding") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showOnboarding() }
         }
+        #if DEBUG
         runSelfTestIfRequested()
+        #endif
     }
 
     // MARK: - Menu
@@ -226,16 +228,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openVideoEditor(for: url)
     }
 
-    /// Double-click a card: recordings open the trim editor, screenshots open a big preview.
+    /// Double-click a card: recordings open the trim editor, screenshots open the annotator.
     private func previewItem(_ item: CaptureItem) {
         if item.isVideo, let url = item.videoURL {
             openVideoEditor(for: url)
             return
         }
-        previewWindow?.close()
-        let w = PreviewWindow(image: item.image)
-        previewWindow = w
-        w.show()
+        openAnnotator(for: item.image)
+    }
+
+    private func openAnnotator(for image: NSImage) {
+        annotateWindow?.close()
+        let w = AnnotateWindow(image: image, saveDirectory: saveDirectory)
+        annotateWindow = w
+        w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// Remove a card: discard any unsaved recording. (Drag temp files are left in place
@@ -438,8 +445,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("Sideshot error: \(error.localizedDescription)")
     }
 
-    // MARK: - Diagnostics (off by default)
+    // MARK: - Diagnostics (DEBUG-only; never shipped)
 
+    #if DEBUG
     private func runSelfTestIfRequested() {
         if let path = UserDefaults.standard.string(forKey: "SIDESHOT_EDITORTEST_FILE") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -495,4 +503,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? d.write(to: url, options: .atomic)
         }
     }
+    #endif
 }

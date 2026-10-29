@@ -20,6 +20,7 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
   - `Esc` — cancel any in-progress capture or recording
 - **Window capture** — every window dims, the one under your cursor lights up, click to snap it.
 - **Floating side stack** — results stack on the screen edge (newest at the bottom). Hover to **Copy** or **Save**; drag a card out to export it anywhere.
+- **Annotate** — double-click any screenshot to mark it up before sharing: arrow, rectangle, highlighter, freehand pen, text, and blur (for redacting sensitive bits). Undo/redo, keyboard shortcuts, live pixelation.
 - **Recording** — stops into the stack as an unsaved card (nothing is saved until you say so).
 - **QuickTime-style editor** — scrub and trim recordings on one strip, then **Save As…**.
 - **Naming** — `SS_MMMddyy_HH.mm.png` / `SR_MMMddyy_HH.mm.mov` (e.g. `SS_Oct1826_13.05.png`), with a `_2` suffix on collisions.

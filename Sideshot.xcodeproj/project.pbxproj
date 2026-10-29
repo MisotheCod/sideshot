@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		126A685FF4AC6479FDFF25E0 /* Annotate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178CAFD2AD963D55DF4FD0A6 /* Annotate.swift */; };
 		169B030313A508FA1805D03D /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B71B00468B926A709B5B2E9 /* HotkeyManager.swift */; };
 		24199E923110D22D2F15A584 /* Naming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AA9A3320D6333C4BDE3C48 /* Naming.swift */; };
 		25DFFEF131C8B9BE474161C1 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADFEE2FDD3B834787EE02A6 /* Onboarding.swift */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		178CAFD2AD963D55DF4FD0A6 /* Annotate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Annotate.swift; sourceTree = "<group>"; };
 		1A70D292D77817940D89367F /* Sideshot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Sideshot.entitlements; sourceTree = "<group>"; };
 		23AA9A3320D6333C4BDE3C48 /* Naming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Naming.swift; sourceTree = "<group>"; };
 		36A76FA4E0832234D5CFFDBB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 		60537C108B2DF94296D484A1 /* Sideshot */ = {
 			isa = PBXGroup;
 			children = (
+				178CAFD2AD963D55DF4FD0A6 /* Annotate.swift */,
 				9053D037CE992FB48F4CE22B /* AppDelegate.swift */,
 				52985D11E209A1FEB0D4AFB9 /* Assets.xcassets */,
 				948634906B8D0F2B305BA9C1 /* CaptureEngine.swift */,
@@ -147,6 +150,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				126A685FF4AC6479FDFF25E0 /* Annotate.swift in Sources */,
 				F122BF42E0498B388316BBEE /* AppDelegate.swift in Sources */,
 				DE1968667B8FFA7DB05A2411 /* CaptureEngine.swift in Sources */,
 				169B030313A508FA1805D03D /* HotkeyManager.swift in Sources */,
