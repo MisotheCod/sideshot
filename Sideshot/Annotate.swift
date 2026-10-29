@@ -135,12 +135,16 @@ struct AnnotateView: View {
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
 
                 ForEach(annotations) { a in
-                    AnnotationLayer(ann: a, m: m, source: cgImage, isSelected: selectedID == a.id)
-                        .onTapGesture { select(a) }
+                    AnnotationLayer(ann: a, m: m, source: cgImage,
+                                    isSelected: selectedID == a.id,
+                                    isBeingEdited: editingTextID == a.id,
+                                    onMove: { d in moveAnnotation(a.id, by: d, m: m) },
+                                    onEditText: { startEditingText(a) })
                 }
 
                 if let d = draft {
-                    AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false)
+                    AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
+                                    isBeingEdited: false, onMove: { _ in }, onEditText: {})
                 }
 
                 if let id = editingTextID,
@@ -223,6 +227,7 @@ struct AnnotateView: View {
             if let msg = message { Text(msg).font(.callout).foregroundColor(.secondary) }
 
             Button("Cancel") { onClose() }.keyboardShortcut(.cancelAction)
+            Button("Share") { share() }
             Button("Save") { Task { await save() } }.disabled(annotations.isEmpty)
             Button("Copy") { copy() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
@@ -258,9 +263,23 @@ struct AnnotateView: View {
             }
     }
 
-    private func select(_ a: Annotation) {
-        if editingTextID != nil { commitText() }
+    private func moveAnnotation(_ id: UUID, by viewDelta: CGSize, m: Mapping) {
+        selectedID = id
+        let dx = viewDelta.width / m.scale
+        let dy = viewDelta.height / m.scale
+        if let i = annotations.firstIndex(where: { $0.id == id }) {
+            var arr = annotations
+            arr[i].points = arr[i].points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+            annotations = arr
+        }
+    }
+
+    private func startEditingText(_ a: Annotation) {
         selectedID = a.id
+        editingTextID = a.id
+        editingTextValue = a.text
+        textFieldFocused = true
+        DispatchQueue.main.async { textFieldFocused = true }
     }
 
     private func handleTextTap(_ loc: CGPoint, m: Mapping) {
@@ -303,6 +322,15 @@ struct AnnotateView: View {
 
     private func compositedImage() -> CGImage? {
         Self.render(cgImage: cgImage, annotations: annotations)
+    }
+
+    private func share() {
+        let cg = compositedImage() ?? cgImage
+        let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        let picker = NSSharingServicePicker(items: [img])
+        if let cv = NSApp.keyWindow?.contentView {
+            picker.show(relativeTo: cv.bounds, of: cv, preferredEdge: .maxY)
+        }
     }
 
     private func copy() {
@@ -444,6 +472,11 @@ struct AnnotationLayer: View {
     let m: Mapping
     let source: CGImage
     let isSelected: Bool
+    let isBeingEdited: Bool
+    let onMove: (CGSize) -> Void
+    let onEditText: () -> Void
+
+    @State private var lastTranslation: CGSize = .zero
 
     var body: some View {
         Group {
@@ -479,7 +512,7 @@ struct AnnotationLayer: View {
                     if let r = ann.rect { EmptyView() }
                 }
             case .text:
-                if !ann.text.isEmpty {
+                if !ann.text.isEmpty && !isBeingEdited {
                     Text(ann.text)
                         .font(.system(size: 28 * m.scale, weight: .semibold))
                         .foregroundColor(ann.color)
@@ -490,6 +523,20 @@ struct AnnotationLayer: View {
             }
         }
         .overlay { if isSelected { selectionHalo } }
+        .contentShape(Rectangle())
+        .gesture(moveGesture)
+        .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
+    }
+
+    private var moveGesture: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { v in
+                let delta = CGSize(width: v.translation.width - lastTranslation.width,
+                                   height: v.translation.height - lastTranslation.height)
+                lastTranslation = v.translation
+                if delta.width != 0 || delta.height != 0 { onMove(delta) }
+            }
+            .onEnded { _ in lastTranslation = .zero }
     }
 
     @ViewBuilder
