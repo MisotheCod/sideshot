@@ -105,6 +105,7 @@ struct AnnotateView: View {
     @State private var editingTextID: UUID?
     @State private var editingTextValue: String = ""
     @State private var message: String?
+    @FocusState private var textFieldFocused: Bool
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -145,7 +146,7 @@ struct AnnotateView: View {
                 if let id = editingTextID,
                    let idx = annotations.firstIndex(where: { $0.id == id }) {
                     let pos = m.toView(annotations[idx].points.first ?? .zero)
-                    TextField("", text: $editingTextValue)
+                    TextField("Type…", text: $editingTextValue)
                         .textFieldStyle(.plain)
                         .font(.system(size: 28, weight: .semibold))
                         .foregroundColor(color)
@@ -153,6 +154,7 @@ struct AnnotateView: View {
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.35)))
                         .position(x: pos.x, y: pos.y)
+                        .focused($textFieldFocused)
                         .onSubmit { commitText() }
                         .onChange(of: editingTextValue) { v in
                             if let i = annotations.firstIndex(where: { $0.id == id }) {
@@ -163,7 +165,10 @@ struct AnnotateView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
-            .gesture(drawGesture(m: m))
+            .gesture(drawGesture(m: m), including: tool == .text ? .none : .all)
+            .gesture(SpatialTapGesture().onEnded { v in
+                if tool == .text { handleTextTap(v.location, m: m) }
+            }, including: tool == .text ? .all : .none)
             .overlay(alignment: .top) { topToolbar }
             .overlay(alignment: .bottom) { bottomBar }
         }
@@ -174,6 +179,7 @@ struct AnnotateView: View {
             }
             return .handled
         }
+        .onChange(of: tool) { _ in if editingTextID != nil { commitText() } }
     }
 
     // MARK: - Toolbars
@@ -230,8 +236,6 @@ struct AnnotateView: View {
     private func drawGesture(m: Mapping) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { v in
-                if editingTextID != nil { commitText() }
-                guard tool != .text else { return }
                 let ip = m.toImage(v.location)
                 if draft == nil {
                     draft = Annotation(tool: tool, color: color, points: [ip, ip],
@@ -242,16 +246,7 @@ struct AnnotateView: View {
                     draft?.points[1] = ip
                 }
             }
-            .onEnded { v in
-                if tool == .text {
-                    let ip = m.toImage(v.location)
-                    var a = Annotation(tool: .text, color: color, points: [ip], text: "")
-                    annotations.append(a)
-                    editingTextID = a.id
-                    editingTextValue = ""
-                    selectedID = a.id
-                    return
-                }
+            .onEnded { _ in
                 defer { draft = nil }
                 guard let a = draft else { return }
                 if a.tool != .pen {
@@ -268,6 +263,21 @@ struct AnnotateView: View {
         selectedID = a.id
     }
 
+    private func handleTextTap(_ loc: CGPoint, m: Mapping) {
+        if editingTextID != nil {
+            commitText()   // click elsewhere while editing = commit, don't place a new box
+            return
+        }
+        let ip = m.toImage(loc)
+        let a = Annotation(tool: .text, color: color, points: [ip], text: "")
+        annotations.append(a)
+        editingTextID = a.id
+        editingTextValue = ""
+        selectedID = a.id
+        textFieldFocused = true
+        DispatchQueue.main.async { textFieldFocused = true }   // focus once the field is on screen
+    }
+
     private func commitText() {
         guard let id = editingTextID else { return }
         if editingTextValue.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -275,6 +285,7 @@ struct AnnotateView: View {
         }
         editingTextID = nil
         editingTextValue = ""
+        textFieldFocused = false
     }
 
     // MARK: - Undo / redo
