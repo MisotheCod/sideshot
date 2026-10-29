@@ -3,6 +3,7 @@ import SwiftUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
+import Vision
 
 // MARK: - Model
 
@@ -50,6 +51,44 @@ let annotationPalette: [(name: String, color: Color)] = [
     ("Red", .red), ("Orange", .orange), ("Yellow", .yellow),
     ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("White", .white),
 ]
+
+// MARK: - Live text (OCR)
+
+struct LiveTextBlock: Identifiable {
+    let id = UUID()
+    let text: String
+    let rect: CGRect   // image pixel space, top-left origin
+    let url: URL?
+}
+
+func recognizeLiveText(in image: CGImage) -> [LiveTextBlock] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    try? handler.perform([request])
+    guard let observations = request.results else { return [] }
+
+    let w = CGFloat(image.width), h = CGFloat(image.height)
+    var blocks: [LiveTextBlock] = []
+    for obs in observations {
+        guard let candidate = obs.topCandidates(1).first else { continue }
+        let box = obs.boundingBox   // normalized, bottom-left origin
+        let rect = CGRect(x: box.minX * w,
+                          y: (1 - box.maxY) * h,
+                          width: box.width * w,
+                          height: box.height * h)
+        blocks.append(LiveTextBlock(text: candidate.string, rect: rect, url: extractURL(from: candidate.string)))
+    }
+    return blocks
+}
+
+func extractURL(from text: String) -> URL? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+    let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+    return detector.firstMatch(in: trimmed, range: range)?.url
+}
 
 // MARK: - Coordinate mapping
 
@@ -106,6 +145,8 @@ struct AnnotateView: View {
     @State private var editingTextValue: String = ""
     @State private var message: String?
     @FocusState private var textFieldFocused: Bool
+    @State private var liveTextEnabled = false
+    @State private var liveTextBlocks: [LiveTextBlock] = []
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -133,6 +174,12 @@ struct AnnotateView: View {
                     .frame(width: imgSize.width * m.scale, height: imgSize.height * m.scale)
                     .position(x: m.dx + imgSize.width * m.scale / 2, y: m.dy + imgSize.height * m.scale / 2)
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+
+                if liveTextEnabled {
+                    ForEach(liveTextBlocks) { b in
+                        LiveTextBlockView(block: b, m: m, onTap: { handleLiveTextTap(b) })
+                    }
+                }
 
                 ForEach(annotations) { a in
                     AnnotationLayer(ann: a, m: m, source: cgImage,
@@ -207,6 +254,17 @@ struct AnnotateView: View {
                 .animation(.spring(response: 0.2, dampingFraction: 0.7), value: color == c.color)
                 .help(c.name)
             }
+            Rectangle().fill(Color.white.opacity(0.15)).frame(width: 1, height: 22).padding(.horizontal, 6)
+            Button { toggleLiveText() } label: {
+                Image(systemName: "text.viewfinder")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(liveTextEnabled ? .white : .secondary)
+                    .frame(width: 34, height: 34)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(liveTextEnabled ? Color.accentColor : Color.clear))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Live Text — click text to copy, links to open")
         }
         .padding(.vertical, 6).padding(.horizontal, 8)
         .background(GlassBackground(cornerRadius: 18))
@@ -330,6 +388,31 @@ struct AnnotateView: View {
         let picker = NSSharingServicePicker(items: [img])
         if let cv = NSApp.keyWindow?.contentView {
             picker.show(relativeTo: cv.bounds, of: cv, preferredEdge: .maxY)
+        }
+    }
+
+    // MARK: - Live text
+
+    private func toggleLiveText() {
+        liveTextEnabled.toggle()
+        if liveTextEnabled && liveTextBlocks.isEmpty {
+            let img = cgImage
+            Task.detached {
+                let blocks = recognizeLiveText(in: img)
+                await MainActor.run { self.liveTextBlocks = blocks }
+            }
+        }
+    }
+
+    private func handleLiveTextTap(_ b: LiveTextBlock) {
+        if let url = b.url {
+            NSWorkspace.shared.open(url)
+        } else {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(b.text, forType: .string)
+            message = "Copied text"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { message = nil }
         }
     }
 
@@ -684,5 +767,33 @@ struct GlassBackground: View {
                         lineWidth: 0.8)
             )
             .shadow(color: .black.opacity(0.40), radius: 14, y: 6)
+    }
+}
+
+/// Invisible hit-area over a recognized text block; hover to reveal, click to copy/open.
+struct LiveTextBlockView: View {
+    let block: LiveTextBlock
+    let m: Mapping
+    let onTap: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        let r = m.toView(block.rect)
+        ZStack {
+            Rectangle().fill(hovering ? Color.accentColor.opacity(0.18) : Color.clear)
+            if hovering {
+                Rectangle().stroke(Color.accentColor.opacity(0.7), lineWidth: 1)
+            }
+        }
+        .frame(width: r.width, height: r.height)
+        .position(x: r.midX, y: r.midY)
+        .contentShape(Rectangle())
+        .onHover { h in
+            hovering = h
+            if h { NSCursor.iBeam.set() }
+        }
+        .onTapGesture { onTap() }
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
