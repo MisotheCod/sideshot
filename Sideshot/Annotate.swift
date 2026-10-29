@@ -115,12 +115,11 @@ struct Mapping {
 final class AnnotateWindow: NSWindow {
     init(image: NSImage, saveDirectory: URL) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 780),
-                   styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+                   styleMask: [.titled, .closable, .resizable, .miniaturizable],
                    backing: .buffered, defer: false)
         isReleasedWhenClosed = false
         center()
         title = "Annotate"
-        titlebarAppearsTransparent = true
         minSize = NSSize(width: 720, height: 540)
 
         let view = AnnotateView(image: image, saveDirectory: saveDirectory) { [weak self] in self?.close() }
@@ -147,8 +146,8 @@ struct AnnotateView: View {
     @State private var editingTextValue: String = ""
     @State private var message: String?
     @FocusState private var textFieldFocused: Bool
-    @State private var liveTextEnabled = false
     @State private var liveTextBlocks: [LiveTextBlock] = []
+    @State private var shareAnchor: NSView?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -165,67 +164,69 @@ struct AnnotateView: View {
     private var imgSize: CGSize { CGSize(width: cgImage.width, height: cgImage.height) }
 
     var body: some View {
-        GeometryReader { geo in
-            let m = Mapping.make(img: imgSize, view: geo.size)
-            ZStack {
-                Color.black.opacity(0.78).ignoresSafeArea()
+        VStack(spacing: 0) {
+            header
 
-                Image(decorative: cgImage, scale: 1)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: imgSize.width * m.scale, height: imgSize.height * m.scale)
-                    .position(x: m.dx + imgSize.width * m.scale / 2, y: m.dy + imgSize.height * m.scale / 2)
-                    .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+            GeometryReader { geo in
+                let m = Mapping.make(img: imgSize, view: geo.size)
+                ZStack {
+                    Color.black.opacity(0.78)
 
-                if liveTextEnabled {
+                    Image(decorative: cgImage, scale: 1)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: imgSize.width * m.scale, height: imgSize.height * m.scale)
+                        .position(x: m.dx + imgSize.width * m.scale / 2, y: m.dy + imgSize.height * m.scale / 2)
+                        .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+
                     ForEach(liveTextBlocks) { b in
                         LiveTextBlockView(block: b, m: m, onTap: { handleLiveTextTap(b) })
                     }
-                }
 
-                ForEach(annotations) { a in
-                    AnnotationLayer(ann: a, m: m, source: cgImage,
-                                    isSelected: selectedID == a.id,
-                                    isBeingEdited: editingTextID == a.id,
-                                    onMove: { d in moveAnnotation(a.id, by: d, m: m) },
-                                    onEditText: { startEditingText(a) },
-                                    onSelect: { selectedID = a.id })
-                }
+                    ForEach(annotations) { a in
+                        AnnotationLayer(ann: a, m: m, source: cgImage,
+                                        isSelected: selectedID == a.id,
+                                        isBeingEdited: editingTextID == a.id,
+                                        onMove: { d in moveAnnotation(a.id, by: d, m: m) },
+                                        onEditText: { startEditingText(a) },
+                                        onSelect: { selectedID = a.id })
+                    }
 
-                if let d = draft {
-                    AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
-                                    isBeingEdited: false, onMove: { _ in }, onEditText: {}, onSelect: {})
-                }
+                    if let d = draft {
+                        AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
+                                        isBeingEdited: false, onMove: { _ in }, onEditText: {}, onSelect: {})
+                    }
 
-                if let id = editingTextID,
-                   let idx = annotations.firstIndex(where: { $0.id == id }) {
-                    let pos = m.toView(annotations[idx].points.first ?? .zero)
-                    TextField("Type…", text: $editingTextValue)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundColor(color)
-                        .fixedSize()
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.35)))
-                        .position(x: pos.x, y: pos.y)
-                        .focused($textFieldFocused)
-                        .onSubmit { commitText() }
-                        .onChange(of: editingTextValue) { v in
-                            if let i = annotations.firstIndex(where: { $0.id == id }) {
-                                var arr = annotations; arr[i].text = v; annotations = arr
+                    if let id = editingTextID,
+                       let idx = annotations.firstIndex(where: { $0.id == id }) {
+                        let pos = m.toView(annotations[idx].points.first ?? .zero)
+                        TextField("Type…", text: $editingTextValue)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundColor(color)
+                            .fixedSize()
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.35)))
+                            .position(x: pos.x, y: pos.y)
+                            .focused($textFieldFocused)
+                            .onSubmit { commitText() }
+                            .onChange(of: editingTextValue) { v in
+                                if let i = annotations.firstIndex(where: { $0.id == id }) {
+                                    var arr = annotations; arr[i].text = v; annotations = arr
+                                }
                             }
-                        }
+                    }
                 }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .contentShape(Rectangle())
+                .gesture(drawGesture(m: m), including: (tool == .text || tool == .selector) ? .none : .all)
+                .gesture(SpatialTapGesture().onEnded { v in
+                    if tool == .text { handleTextTap(v.location, m: m) }
+                }, including: tool == .text ? .all : .none)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .contentShape(Rectangle())
-            .gesture(drawGesture(m: m), including: (tool == .text || tool == .selector) ? .none : .all)
-            .gesture(SpatialTapGesture().onEnded { v in
-                if tool == .text { handleTextTap(v.location, m: m) }
-            }, including: tool == .text ? .all : .none)
-            .overlay(alignment: .top) { header }
         }
         .frame(minWidth: 720, minHeight: 540)
+        .onAppear { loadLiveText() }
         .onKeyPress(keys: Set(["v", "a", "r", "h", "t", "b", "p"])) { press in
             if let c = press.characters.first {
                 for t in AnnoTool.allCases where t.key.lowercased() == String(c).lowercased() { tool = t }
@@ -261,16 +262,6 @@ struct AnnotateView: View {
                 }
             }
             Spacer()
-            Button { toggleLiveText() } label: {
-                Image(systemName: "text.viewfinder")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(liveTextEnabled ? .white : .secondary)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(liveTextEnabled ? Color.accentColor : Color.clear))
-            }
-            .buttonStyle(PlainButtonStyle())
-            .help("Live Text — click text to copy, links to open")
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(annotations.isEmpty).help("Undo (⌘Z)")
             Button { redoAction() } label: { Image(systemName: "arrow.uturn.forward") }
@@ -278,13 +269,15 @@ struct AnnotateView: View {
             Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 22)
             if let msg = message { Text(msg).font(.callout).foregroundColor(.secondary) }
             Button("Cancel") { onClose() }.keyboardShortcut(.cancelAction)
-            Button("Share") { share() }
+            Button { share() } label: { Image(systemName: "square.and.arrow.up") }
+                .help("Share")
+                .background(AnchorView { shareAnchor = $0 })
             Button("Save") { Task { await save() } }.disabled(annotations.isEmpty)
             Button("Copy") { copy() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 12).padding(.vertical, 7)
-        .background(GlassBackground(cornerRadius: 14))
-        .padding(.horizontal, 10).padding(.top, 44)
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
     }
 
     // MARK: - Gestures
@@ -379,21 +372,21 @@ struct AnnotateView: View {
         let cg = compositedImage() ?? cgImage
         let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         let picker = NSSharingServicePicker(items: [img])
-        if let cv = NSApp.keyWindow?.contentView {
+        if let anchor = shareAnchor {
+            picker.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        } else if let cv = NSApp.keyWindow?.contentView {
             picker.show(relativeTo: cv.bounds, of: cv, preferredEdge: .maxY)
         }
     }
 
     // MARK: - Live text
 
-    private func toggleLiveText() {
-        liveTextEnabled.toggle()
-        if liveTextEnabled && liveTextBlocks.isEmpty {
-            let img = cgImage
-            Task.detached {
-                let blocks = recognizeLiveText(in: img)
-                await MainActor.run { self.liveTextBlocks = blocks }
-            }
+    private func loadLiveText() {
+        guard liveTextBlocks.isEmpty else { return }
+        let img = cgImage
+        Task.detached {
+            let blocks = recognizeLiveText(in: img)
+            await MainActor.run { self.liveTextBlocks = blocks }
         }
     }
 
@@ -776,9 +769,9 @@ struct LiveTextBlockView: View {
     var body: some View {
         let r = m.toView(block.rect)
         ZStack {
-            Rectangle().fill(hovering ? Color.accentColor.opacity(0.18) : Color.clear)
+            Rectangle().fill(hovering ? Color.accentColor.opacity(0.4) : Color.clear)
             if hovering {
-                Rectangle().stroke(Color.accentColor.opacity(0.7), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 2).stroke(Color.white, lineWidth: 2)
             }
         }
         .frame(width: r.width, height: r.height)
@@ -791,4 +784,15 @@ struct LiveTextBlockView: View {
         .onTapGesture { onTap() }
         .animation(.easeOut(duration: 0.12), value: hovering)
     }
+}
+
+/// Exposes an NSView so NSSharingServicePicker can anchor its popover to the button.
+struct AnchorView: NSViewRepresentable {
+    let onView: (NSView) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView(frame: .zero)
+        onView(v)
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
