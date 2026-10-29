@@ -8,10 +8,11 @@ import Vision
 // MARK: - Model
 
 enum AnnoTool: String, CaseIterable, Identifiable {
-    case arrow, rect, highlight, pen, text, blur
+    case selector, arrow, rect, highlight, pen, text, blur
     var id: String { rawValue }
     var icon: String {
         switch self {
+        case .selector: return "cursorarrow"
         case .pen: return "pencil.tip"
         case .arrow: return "arrow.up.right"
         case .rect: return "rectangle"
@@ -22,6 +23,7 @@ enum AnnoTool: String, CaseIterable, Identifiable {
     }
     var key: String {
         switch self {
+        case .selector: return "V"
         case .pen: return "P"
         case .arrow: return "A"
         case .rect: return "R"
@@ -137,7 +139,7 @@ struct AnnotateView: View {
 
     @State private var annotations: [Annotation] = []
     @State private var redo: [Annotation] = []
-    @State private var tool: AnnoTool = .arrow
+    @State private var tool: AnnoTool = .selector
     @State private var color: Color = .red
     @State private var draft: Annotation?
     @State private var selectedID: UUID?
@@ -186,12 +188,13 @@ struct AnnotateView: View {
                                     isSelected: selectedID == a.id,
                                     isBeingEdited: editingTextID == a.id,
                                     onMove: { d in moveAnnotation(a.id, by: d, m: m) },
-                                    onEditText: { startEditingText(a) })
+                                    onEditText: { startEditingText(a) },
+                                    onSelect: { selectedID = a.id })
                 }
 
                 if let d = draft {
                     AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
-                                    isBeingEdited: false, onMove: { _ in }, onEditText: {})
+                                    isBeingEdited: false, onMove: { _ in }, onEditText: {}, onSelect: {})
                 }
 
                 if let id = editingTextID,
@@ -216,15 +219,14 @@ struct AnnotateView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
-            .gesture(drawGesture(m: m), including: tool == .text ? .none : .all)
+            .gesture(drawGesture(m: m), including: (tool == .text || tool == .selector) ? .none : .all)
             .gesture(SpatialTapGesture().onEnded { v in
                 if tool == .text { handleTextTap(v.location, m: m) }
             }, including: tool == .text ? .all : .none)
-            .overlay(alignment: .top) { topToolbar }
-            .overlay(alignment: .bottom) { bottomBar }
+            .overlay(alignment: .top) { header }
         }
         .frame(minWidth: 720, minHeight: 540)
-        .onKeyPress(keys: Set(["a", "r", "h", "t", "b", "p"])) { press in
+        .onKeyPress(keys: Set(["v", "a", "r", "h", "t", "b", "p"])) { press in
             if let c = press.characters.first {
                 for t in AnnoTool.allCases where t.key.lowercased() == String(c).lowercased() { tool = t }
             }
@@ -235,69 +237,60 @@ struct AnnotateView: View {
 
     // MARK: - Toolbars
 
-    private var topToolbar: some View {
-        HStack(spacing: 2) {
-            ForEach(AnnoTool.allCases) { t in
-                ToolButton(icon: t.icon, active: tool == t, hint: t.key) { tool = t }
-            }
-            Rectangle().fill(Color.white.opacity(0.15)).frame(width: 1, height: 22).padding(.horizontal, 6)
-            ForEach(Array(annotationPalette.enumerated()), id: \.offset) { _, c in
-                Button { color = c.color } label: {
-                    Circle()
-                        .fill(c.color)
-                        .frame(width: 20, height: 20)
-                        .overlay(Circle().stroke(Color.white.opacity(color == c.color ? 0.95 : 0.15),
-                                               lineWidth: color == c.color ? 2 : 1))
+    private var header: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(AnnoTool.allCases) { t in
+                    ToolButton(icon: t.icon, active: tool == t, hint: t.key) { tool = t }
                 }
-                .buttonStyle(PlainButtonStyle())
-                .scaleEffect(color == c.color ? 1.15 : 1)
-                .animation(.spring(response: 0.2, dampingFraction: 0.7), value: color == c.color)
-                .help(c.name)
             }
-            Rectangle().fill(Color.white.opacity(0.15)).frame(width: 1, height: 22).padding(.horizontal, 6)
+            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 22)
+            HStack(spacing: 3) {
+                ForEach(Array(annotationPalette.enumerated()), id: \.offset) { _, c in
+                    Button { color = c.color } label: {
+                        Circle()
+                            .fill(c.color)
+                            .frame(width: 18, height: 18)
+                            .overlay(Circle().stroke(Color.white.opacity(color == c.color ? 0.95 : 0.15),
+                                                   lineWidth: color == c.color ? 2 : 1))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .scaleEffect(color == c.color ? 1.15 : 1)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.7), value: color == c.color)
+                    .help(c.name)
+                }
+            }
+            Spacer()
             Button { toggleLiveText() } label: {
                 Image(systemName: "text.viewfinder")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(liveTextEnabled ? .white : .secondary)
-                    .frame(width: 34, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(liveTextEnabled ? Color.accentColor : Color.clear))
             }
             .buttonStyle(PlainButtonStyle())
             .help("Live Text — click text to copy, links to open")
-        }
-        .padding(.vertical, 6).padding(.horizontal, 8)
-        .background(GlassBackground(cornerRadius: 18))
-        .padding(.top, 14)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 14) {
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(annotations.isEmpty)
-                .help("Undo (⌘Z)")
+                .disabled(annotations.isEmpty).help("Undo (⌘Z)")
             Button { redoAction() } label: { Image(systemName: "arrow.uturn.forward") }
-                .disabled(redo.isEmpty)
-                .help("Redo (⌘⇧Z)")
-
-            Spacer()
-
+                .disabled(redo.isEmpty).help("Redo (⌘⇧Z)")
+            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 22)
             if let msg = message { Text(msg).font(.callout).foregroundColor(.secondary) }
-
             Button("Cancel") { onClose() }.keyboardShortcut(.cancelAction)
             Button("Share") { share() }
             Button("Save") { Task { await save() } }.disabled(annotations.isEmpty)
             Button("Copy") { copy() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 18).padding(.vertical, 12)
-        .background(GlassBackground(cornerRadius: 18))
-        .padding(.horizontal, 18).padding(.bottom, 16)
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(GlassBackground(cornerRadius: 14))
+        .padding(.horizontal, 10).padding(.top, 44)
     }
 
     // MARK: - Gestures
 
     private func drawGesture(m: Mapping) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        DragGesture(minimumDistance: 3, coordinateSpace: .local)
             .onChanged { v in
                 let ip = m.toImage(v.location)
                 if draft == nil {
@@ -458,15 +451,13 @@ struct AnnotateView: View {
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.saveGState()
-        ctx.translateBy(x: 0, y: CGFloat(h))
-        ctx.scaleBy(x: 1, y: -1)
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
-        ctx.restoreGState()
 
         for a in annotations {
             let ns = NSColor(a.color)
             switch a.tool {
+            case .selector:
+                break
             case .blur:
                 if let r = a.rect, let tile = pixelated(cgImage, in: r) {
                     ctx.draw(tile, in: flip(r, CGFloat(h)))
@@ -558,12 +549,15 @@ struct AnnotationLayer: View {
     let isBeingEdited: Bool
     let onMove: (CGSize) -> Void
     let onEditText: () -> Void
+    let onSelect: () -> Void
 
     @State private var lastTranslation: CGSize = .zero
 
     var body: some View {
         Group {
             switch ann.tool {
+            case .selector:
+                EmptyView()
             case .pen:
                 PenShape(points: ann.points.map { m.toView($0) })
                     .stroke(ann.color, style: StrokeStyle(lineWidth: max(1, ann.lineWidth * m.scale), lineCap: .round, lineJoin: .round))
@@ -608,6 +602,7 @@ struct AnnotationLayer: View {
         .overlay { if isSelected { selectionHalo } }
         .contentShape(Rectangle())
         .gesture(moveGesture)
+        .onTapGesture { onSelect() }
         .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
     }
 
