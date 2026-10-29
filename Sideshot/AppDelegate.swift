@@ -454,6 +454,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.openVideoEditor(for: URL(fileURLWithPath: path))
             }
         }
+        if let path = UserDefaults.standard.string(forKey: "SIDESHOT_ANNOTATETEST") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                guard let self, let img = NSImage(contentsOfFile: path) else { return }
+                self.openAnnotator(for: img)
+            }
+        }
         if UserDefaults.standard.bool(forKey: "SIDESHOT_MODALTEST") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.presentRecordMode() }
         }

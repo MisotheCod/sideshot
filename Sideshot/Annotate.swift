@@ -164,7 +164,7 @@ struct AnnotateView: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
             .gesture(drawGesture(m: m))
-            .overlay(alignment: .topLeading) { toolRail }
+            .overlay(alignment: .top) { topToolbar }
             .overlay(alignment: .bottom) { bottomBar }
         }
         .frame(minWidth: 720, minHeight: 540)
@@ -178,17 +178,17 @@ struct AnnotateView: View {
 
     // MARK: - Toolbars
 
-    private var toolRail: some View {
-        VStack(spacing: 6) {
+    private var topToolbar: some View {
+        HStack(spacing: 2) {
             ForEach(AnnoTool.allCases) { t in
                 ToolButton(icon: t.icon, active: tool == t, hint: t.key) { tool = t }
             }
-            Divider().padding(.vertical, 4)
+            Rectangle().fill(Color.white.opacity(0.15)).frame(width: 1, height: 22).padding(.horizontal, 6)
             ForEach(Array(annotationPalette.enumerated()), id: \.offset) { _, c in
                 Button { color = c.color } label: {
                     Circle()
                         .fill(c.color)
-                        .frame(width: 22, height: 22)
+                        .frame(width: 20, height: 20)
                         .overlay(Circle().stroke(Color.white.opacity(color == c.color ? 0.95 : 0.15),
                                                lineWidth: color == c.color ? 2 : 1))
                 }
@@ -198,11 +198,9 @@ struct AnnotateView: View {
                 .help(c.name)
             }
         }
-        .padding(10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 12, y: 5)
-        .padding(.leading, 14).padding(.top, 14)
+        .padding(.vertical, 6).padding(.horizontal, 8)
+        .background(GlassBackground(cornerRadius: 18))
+        .padding(.top, 14)
     }
 
     private var bottomBar: some View {
@@ -223,9 +221,7 @@ struct AnnotateView: View {
             Button("Copy") { copy() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 18).padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+        .background(GlassBackground(cornerRadius: 18))
         .padding(.horizontal, 18).padding(.bottom, 16)
     }
 
@@ -597,7 +593,7 @@ struct ToolButton: View {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(active ? .white : .secondary)
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(active ? Color.accentColor : Color.white.opacity(hovering ? 0.08 : 0))
@@ -607,5 +603,28 @@ struct ToolButton: View {
         .onHover { hovering = $0 }
         .help("\(icon) (\(hint))")
         .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+}
+
+/// Liquid-glass capsule: frosted material + a specular top-edge highlight + soft drop.
+struct GlassBackground: View {
+    var cornerRadius: CGFloat = 18
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.10), Color.clear],
+                                         startPoint: .top, endPoint: .center))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0.06)],
+                                       startPoint: .top, endPoint: .bottom),
+                        lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.40), radius: 14, y: 6)
     }
 }
