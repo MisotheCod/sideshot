@@ -70,6 +70,10 @@ extension Annotation {
     }
 }
 
+enum ResizeCorner: CaseIterable {
+    case topLeft, topRight, bottomLeft, bottomRight
+}
+
 // MARK: - Live text (OCR)
 
 struct LiveTextBlock: Identifiable {
@@ -166,6 +170,7 @@ struct AnnotateView: View {
     @State private var shareAnchor: NSView?
     @State private var hoveredBlockID: UUID?
     @State private var hoveredAnnotationID: UUID?
+    @State private var selectedTextBlockID: UUID?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -198,8 +203,11 @@ struct AnnotateView: View {
                         .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
 
                     ForEach(liveTextBlocks) { b in
-                        LiveTextBlockView(block: b, m: m, isHovering: hoveredBlockID == b.id,
-                                          onTap: { handleLiveTextTap(b) })
+                        LiveTextBlockView(block: b, m: m,
+                                          isHovering: hoveredBlockID == b.id,
+                                          isSelected: selectedTextBlockID == b.id,
+                                          onTap: { handleLiveTextTap(b) },
+                                          onCopy: { copyTextBlock(b) })
                     }
 
                     ForEach(annotations) { a in
@@ -208,6 +216,7 @@ struct AnnotateView: View {
                                         isBeingEdited: editingTextID == a.id,
                                         isHovered: hoveredAnnotationID == a.id,
                                         onMove: { d in moveAnnotation(a.id, by: d, m: m) },
+                                        onResize: { c, d in resizeAnnotation(a.id, c, by: d, m: m) },
                                         onEditText: { startEditingText(a) },
                                         onSelect: { selectedID = a.id })
                     }
@@ -215,7 +224,7 @@ struct AnnotateView: View {
                     if let d = draft {
                         AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
                                         isBeingEdited: false, isHovered: false,
-                                        onMove: { _ in }, onEditText: {}, onSelect: {})
+                                        onMove: { _ in }, onResize: { _, _ in }, onEditText: {}, onSelect: {})
                     }
 
                     if let id = editingTextID,
@@ -273,6 +282,13 @@ struct AnnotateView: View {
                 for t in AnnoTool.allCases where t.key.lowercased() == String(c).lowercased() { tool = t }
             }
             return .handled
+        }
+        .onKeyPress(keys: Set(["c"])) { press in
+            if press.modifiers.contains(.command) {
+                copySelectedText()
+                return .handled
+            }
+            return .ignored
         }
         .onChange(of: tool) { _ in if editingTextID != nil { commitText() } }
     }
@@ -359,6 +375,31 @@ struct AnnotateView: View {
         }
     }
 
+    private func resizeAnnotation(_ id: UUID, _ corner: ResizeCorner, by viewDelta: CGSize, m: Mapping) {
+        let dx = viewDelta.width / m.scale
+        let dy = viewDelta.height / m.scale
+        guard let i = annotations.firstIndex(where: { $0.id == id }) else { return }
+        let a = annotations[i]
+        guard a.tool != .text else { return }
+        let box = a.boundingRect
+        var newBox = box
+        switch corner {
+        case .topLeft: newBox.origin.x += dx; newBox.origin.y += dy; newBox.size.width -= dx; newBox.size.height -= dy
+        case .topRight: newBox.size.width += dx; newBox.origin.y += dy; newBox.size.height -= dy
+        case .bottomLeft: newBox.origin.x += dx; newBox.size.width -= dx; newBox.size.height += dy
+        case .bottomRight: newBox.size.width += dx; newBox.size.height += dy
+        }
+        newBox.size.width = max(newBox.size.width, 8)
+        newBox.size.height = max(newBox.size.height, 8)
+        let sx = newBox.width / max(box.width, 0.001)
+        let sy = newBox.height / max(box.height, 0.001)
+        var arr = annotations
+        arr[i].points = a.points.map { p in
+            CGPoint(x: newBox.minX + (p.x - box.minX) * sx, y: newBox.minY + (p.y - box.minY) * sy)
+        }
+        annotations = arr
+    }
+
     private func startEditingText(_ a: Annotation) {
         selectedID = a.id
         editingTextID = a.id
@@ -434,13 +475,22 @@ struct AnnotateView: View {
     private func handleLiveTextTap(_ b: LiveTextBlock) {
         if let url = b.url {
             NSWorkspace.shared.open(url)
-        } else {
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(b.text, forType: .string)
-            message = "Copied text"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { message = nil }
+            return
         }
+        selectedTextBlockID = (selectedTextBlockID == b.id) ? nil : b.id
+    }
+
+    private func copyTextBlock(_ b: LiveTextBlock) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(b.text, forType: .string)
+        message = "Copied"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { message = nil }
+    }
+
+    private func copySelectedText() {
+        guard let id = selectedTextBlockID, let b = liveTextBlocks.first(where: { $0.id == id }) else { return }
+        copyTextBlock(b)
     }
 
     private func copy() {
@@ -583,6 +633,7 @@ struct AnnotationLayer: View {
     let isBeingEdited: Bool
     let isHovered: Bool
     let onMove: (CGSize) -> Void
+    let onResize: (ResizeCorner, CGSize) -> Void
     let onEditText: () -> Void
     let onSelect: () -> Void
 
@@ -636,6 +687,7 @@ struct AnnotationLayer: View {
         }
         .overlay { hitSurface }
         .overlay { if isSelected || isHovered { halo } }
+        .overlay { if isSelected && ann.tool != .text { resizeHandles } }
     }
 
     private var hitRect: CGRect {
@@ -646,11 +698,18 @@ struct AnnotationLayer: View {
         let h = hitRect
         return Color(nsColor: NSColor(deviceWhite: 1, alpha: 0.001))
             .frame(width: h.width, height: h.height)
-            .position(x: h.midX, y: h.midY)
             .contentShape(Rectangle())
             .gesture(moveGesture)
             .onTapGesture { onSelect() }
             .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
+            .position(x: h.midX, y: h.midY)
+    }
+
+    private var resizeHandles: some View {
+        let box = m.toView(ann.boundingRect)
+        return ForEach(ResizeCorner.allCases, id: \.self) { corner in
+            ResizeHandle(corner: corner, box: box, onResize: onResize)
+        }
     }
 
     private var moveGesture: some Gesture {
@@ -668,9 +727,45 @@ struct AnnotationLayer: View {
     private var halo: some View {
         let r = m.toView(ann.boundingRect)
         RoundedRectangle(cornerRadius: 2)
-            .stroke(Color.accentColor.opacity(isSelected ? 0.85 : 0.4), lineWidth: isSelected ? 2 : 1.5)
+            .stroke(Color.accentColor.opacity(isSelected ? 0.9 : 0.4),
+                    style: StrokeStyle(lineWidth: isSelected ? 2 : 1.5, dash: isSelected ? [5, 4] : []))
             .frame(width: max(16, r.width + 10), height: max(16, r.height + 10))
             .position(x: r.midX, y: r.midY)
+    }
+}
+
+struct ResizeHandle: View {
+    let corner: ResizeCorner
+    let box: CGRect
+    let onResize: (ResizeCorner, CGSize) -> Void
+
+    @State private var last: CGSize = .zero
+
+    private var position: CGPoint {
+        switch corner {
+        case .topLeft: return CGPoint(x: box.minX, y: box.minY)
+        case .topRight: return CGPoint(x: box.maxX, y: box.minY)
+        case .bottomLeft: return CGPoint(x: box.minX, y: box.maxY)
+        case .bottomRight: return CGPoint(x: box.maxX, y: box.maxY)
+        }
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(.white)
+            .frame(width: 10, height: 10)
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.accentColor, lineWidth: 1))
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { v in
+                        let d = CGSize(width: v.translation.width - last.width, height: v.translation.height - last.height)
+                        last = v.translation
+                        onResize(corner, d)
+                    }
+                    .onEnded { _ in last = .zero }
+            )
+            .position(position)
     }
 }
 
@@ -812,21 +907,33 @@ struct LiveTextBlockView: View {
     let block: LiveTextBlock
     let m: Mapping
     let isHovering: Bool
+    let isSelected: Bool
     let onTap: () -> Void
+    let onCopy: () -> Void
 
     var body: some View {
         let r = m.toView(block.rect)
+        let fill: Color = isSelected ? Color.accentColor.opacity(0.30)
+                         : isHovering ? Color.accentColor.opacity(0.45)
+                         : Color(nsColor: NSColor(deviceWhite: 1, alpha: 0.001))
         ZStack {
-            Rectangle().fill(isHovering ? Color.accentColor.opacity(0.45) : Color(nsColor: NSColor(deviceWhite: 1, alpha: 0.001)))
-            if isHovering {
+            Rectangle().fill(fill)
+            if isHovering || isSelected {
                 RoundedRectangle(cornerRadius: 2).stroke(Color.white, lineWidth: 2)
             }
         }
         .frame(width: r.width, height: r.height)
-        .position(x: r.midX, y: r.midY)
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
+        .contextMenu {
+            if let url = block.url {
+                Button("Open Link") { NSWorkspace.shared.open(url) }
+            }
+            Button("Copy") { onCopy() }
+        }
+        .position(x: r.midX, y: r.midY)
         .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(.easeOut(duration: 0.12), value: isSelected)
     }
 }
 
