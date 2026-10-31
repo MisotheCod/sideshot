@@ -8,14 +8,16 @@ import Vision
 // MARK: - Model
 
 enum AnnoTool: String, CaseIterable, Identifiable {
-    case selector, arrow, rect, highlight, pen, text, blur
+    case selector, arrow, line, rect, ellipse, highlight, pen, text, blur
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .selector: return "cursorarrow"
         case .pen: return "pencil.tip"
         case .arrow: return "arrow.up.right"
+        case .line: return "line.diagonal"
         case .rect: return "rectangle"
+        case .ellipse: return "circle"
         case .highlight: return "highlighter"
         case .text: return "textformat"
         case .blur: return "eye.slash"
@@ -26,7 +28,9 @@ enum AnnoTool: String, CaseIterable, Identifiable {
         case .selector: return "V"
         case .pen: return "P"
         case .arrow: return "A"
+        case .line: return "L"
         case .rect: return "R"
+        case .ellipse: return "O"
         case .highlight: return "H"
         case .text: return "T"
         case .blur: return "B"
@@ -546,12 +550,14 @@ struct AnnotateView: View {
                 if let r = a.rect, let tile = pixelated(cgImage, in: r) {
                     ctx.draw(tile, in: flip(r, CGFloat(h)))
                 }
-            case .pen:
+            case .pen, .line:
                 drawPen(ctx, a, CGFloat(h))
             case .arrow:
                 drawArrow(ctx, a, CGFloat(h), ns)
             case .rect:
                 if let r = a.rect { ctx.setStrokeColor(ns.cgColor); ctx.setLineWidth(a.lineWidth); ctx.addRect(flip(r, CGFloat(h))); ctx.strokePath() }
+            case .ellipse:
+                if let r = a.rect { ctx.setStrokeColor(ns.cgColor); ctx.setLineWidth(a.lineWidth); ctx.strokeEllipse(in: flip(r, CGFloat(h))) }
             case .highlight:
                 if let r = a.rect { ctx.setFillColor(ns.withAlphaComponent(0.32).cgColor); ctx.fill(flip(r, CGFloat(h))) }
             case .text:
@@ -644,7 +650,7 @@ struct AnnotationLayer: View {
             switch ann.tool {
             case .selector:
                 EmptyView()
-            case .pen:
+            case .pen, .line:
                 PenShape(points: ann.points.map { m.toView($0) })
                     .stroke(ann.color, style: StrokeStyle(lineWidth: max(1, ann.lineWidth * m.scale), lineCap: .round, lineJoin: .round))
             case .arrow:
@@ -652,6 +658,13 @@ struct AnnotationLayer: View {
             case .rect:
                 if let r = ann.rect {
                     Rectangle()
+                        .stroke(ann.color, lineWidth: max(1, ann.lineWidth * m.scale))
+                        .frame(width: r.width * m.scale, height: r.height * m.scale)
+                        .position(x: m.toView(r).midX, y: m.toView(r).midY)
+                }
+            case .ellipse:
+                if let r = ann.rect {
+                    Ellipse()
                         .stroke(ann.color, lineWidth: max(1, ann.lineWidth * m.scale))
                         .frame(width: r.width * m.scale, height: r.height * m.scale)
                         .position(x: m.toView(r).midX, y: m.toView(r).midY)
