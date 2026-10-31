@@ -55,8 +55,10 @@ struct Annotation: Identifiable {
 
 let annotationPalette: [(name: String, color: Color)] = [
     ("Red", .red), ("Orange", .orange), ("Yellow", .yellow),
-    ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("White", .white),
+    ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("White", .white), ("Black", .black),
 ]
+
+let strokeWidths: [CGFloat] = [2, 5, 10]
 
 extension Annotation {
     /// Bounding box (image space) used for hit-testing — padded at the call site.
@@ -164,6 +166,7 @@ struct AnnotateView: View {
     @State private var redo: [Annotation] = []
     @State private var tool: AnnoTool = .selector
     @State private var color: Color = .red
+    @State private var strokeWidth: CGFloat = 5
     @State private var draft: Annotation?
     @State private var selectedID: UUID?
     @State private var editingTextID: UUID?
@@ -322,6 +325,18 @@ struct AnnotateView: View {
                     .help(c.name)
                 }
             }
+            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 22)
+            ForEach(strokeWidths, id: \.self) { w in
+                Button { strokeWidth = w } label: {
+                    Capsule().fill(strokeWidth == w ? Color.white : Color.white.opacity(0.4))
+                        .frame(width: 20, height: max(2, w * 0.8))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(width: 24, height: 24)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(strokeWidth == w ? Color.accentColor : Color.clear))
+                .help("Stroke width")
+            }
             Spacer()
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(annotations.isEmpty).help("Undo (⌘Z)")
@@ -348,8 +363,7 @@ struct AnnotateView: View {
             .onChanged { v in
                 let ip = m.toImage(v.location)
                 if draft == nil {
-                    draft = Annotation(tool: tool, color: color, points: [ip, ip],
-                                       lineWidth: tool == .highlight ? 26 : (tool == .blur ? 0 : 4))
+                    draft = Annotation(tool: tool, color: color, points: [ip, ip], lineWidth: strokeWidth)
                 } else if tool == .pen {
                     draft?.points.append(ip)
                 } else {
