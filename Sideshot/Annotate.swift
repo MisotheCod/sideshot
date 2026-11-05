@@ -303,6 +303,14 @@ struct AnnotateView: View {
             return .ignored
         }
         .onKeyPress(.escape) { onClose(); return .handled }
+        .onKeyPress(.delete) {
+            if editingTextID != nil || textFieldFocused { return .ignored }
+            return deleteSelected() ? .handled : .ignored
+        }
+        .onKeyPress(.deleteForward) {
+            if editingTextID != nil || textFieldFocused { return .ignored }
+            return deleteSelected() ? .handled : .ignored
+        }
         .onChange(of: tool) { _ in if editingTextID != nil { commitText() } }
     }
 
@@ -487,6 +495,17 @@ struct AnnotateView: View {
     private func redoAction() {
         guard let r = redo.popLast() else { return }
         annotations.append(r)
+    }
+
+    @discardableResult
+    private func deleteSelected() -> Bool {
+        guard let id = selectedID,
+              let idx = annotations.firstIndex(where: { $0.id == id }) else { return false }
+        let removed = annotations.remove(at: idx)
+        redo.append(removed)
+        selectedID = nil
+        hoveredAnnotationID = nil
+        return true
     }
 
     // MARK: - Export
