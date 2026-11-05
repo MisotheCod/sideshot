@@ -8,7 +8,7 @@ import Vision
 // MARK: - Model
 
 enum AnnoTool: String, CaseIterable, Identifiable {
-    case selector, arrow, line, rect, ellipse, highlight, pen, text, blur
+    case selector, arrow, line, rect, ellipse, highlight, pen, text, callout, blur
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -20,6 +20,7 @@ enum AnnoTool: String, CaseIterable, Identifiable {
         case .ellipse: return "circle"
         case .highlight: return "highlighter"
         case .text: return "textformat"
+        case .callout: return "text.bubble"
         case .blur: return "eye.slash"
         }
     }
@@ -33,6 +34,7 @@ enum AnnoTool: String, CaseIterable, Identifiable {
         case .ellipse: return "O"
         case .highlight: return "H"
         case .text: return "T"
+        case .callout: return "C"
         case .blur: return "B"
         }
     }
@@ -178,6 +180,8 @@ struct AnnotateView: View {
     @State private var hoveredBlockID: UUID?
     @State private var hoveredAnnotationID: UUID?
     @State private var selectedTextBlockID: UUID?
+    @State private var snapX: CGFloat?
+    @State private var snapY: CGFloat?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -223,15 +227,27 @@ struct AnnotateView: View {
                                         isBeingEdited: editingTextID == a.id,
                                         isHovered: hoveredAnnotationID == a.id,
                                         onMove: { d in moveAnnotation(a.id, by: d, m: m) },
+                                        onMoveEnd: { endMove() },
                                         onResize: { c, d in resizeAnnotation(a.id, c, by: d, m: m) },
                                         onEditText: { startEditingText(a) },
                                         onSelect: { selectedID = a.id })
                     }
 
+                    if let gx = snapX {
+                        Rectangle().fill(Color.cyan.opacity(0.85))
+                            .frame(width: 1, height: imgSize.height * m.scale)
+                            .position(x: m.toView(CGPoint(x: gx, y: 0)).x, y: m.dy + imgSize.height * m.scale / 2)
+                    }
+                    if let gy = snapY {
+                        Rectangle().fill(Color.cyan.opacity(0.85))
+                            .frame(width: imgSize.width * m.scale, height: 1)
+                            .position(x: m.dx + imgSize.width * m.scale / 2, y: m.toView(CGPoint(x: 0, y: gy)).y)
+                    }
+
                     if let d = draft {
                         AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
                                         isBeingEdited: false, isHovered: false,
-                                        onMove: { _ in }, onResize: { _, _ in }, onEditText: {}, onSelect: {})
+                                        onMove: { _ in }, onMoveEnd: {}, onResize: { _, _ in }, onEditText: {}, onSelect: {})
                     }
 
                     if let id = editingTextID,
@@ -284,7 +300,7 @@ struct AnnotateView: View {
         }
         .frame(minWidth: 720, minHeight: 540)
         .onAppear { loadLiveText() }
-        .onKeyPress(keys: Set(["v", "a", "r", "h", "t", "b", "p"])) { press in
+        .onKeyPress(keys: Set(["v", "a", "l", "r", "o", "h", "p", "t", "c", "b"])) { press in
             if let c = press.characters.first {
                 for t in AnnoTool.allCases where t.key.lowercased() == String(c).lowercased() { tool = t }
             }
@@ -379,6 +395,13 @@ struct AnnotateView: View {
                 }
                 redo.removeAll()
                 annotations.append(a)
+                if a.tool == .callout {
+                    editingTextID = a.id
+                    editingTextValue = ""
+                    selectedID = a.id
+                    textFieldFocused = true
+                    DispatchQueue.main.async { textFieldFocused = true }
+                }
             }
     }
 
@@ -386,11 +409,37 @@ struct AnnotateView: View {
         selectedID = id
         let dx = viewDelta.width / m.scale
         let dy = viewDelta.height / m.scale
-        if let i = annotations.firstIndex(where: { $0.id == id }) {
-            var arr = annotations
-            arr[i].points = arr[i].points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
-            annotations = arr
+        guard let i = annotations.firstIndex(where: { $0.id == id }) else { return }
+        var pts = annotations[i].points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+
+        // Magnetism: snap the annotation's box center/edges to the image center/edges.
+        let xs = pts.map(\.x), ys = pts.map(\.y)
+        let box = CGRect(x: xs.min()!, y: ys.min()!,
+                         width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+        let W = imgSize.width, H = imgSize.height
+        let th = 8 / m.scale
+        var adjX: CGFloat = 0, adjY: CGFloat = 0
+        var gx: CGFloat?, gy: CGFloat?
+        for (target, current) in [(W / 2, box.midX), (0, box.minX), (W, box.maxX)] where abs(current - target) < th {
+            adjX = target - current; gx = target; break
         }
+        for (target, current) in [(H / 2, box.midY), (0, box.minY), (H, box.maxY)] where abs(current - target) < th {
+            adjY = target - current; gy = target; break
+        }
+        if adjX != 0 || adjY != 0 {
+            pts = pts.map { CGPoint(x: $0.x + adjX, y: $0.y + adjY) }
+        }
+        snapX = gx
+        snapY = gy
+
+        var arr = annotations
+        arr[i].points = pts
+        annotations = arr
+    }
+
+    private func endMove() {
+        snapX = nil
+        snapY = nil
     }
 
     private func resizeAnnotation(_ id: UUID, _ corner: ResizeCorner, by viewDelta: CGSize, m: Mapping) {
@@ -574,6 +623,8 @@ struct AnnotateView: View {
                 if let r = a.rect { ctx.setStrokeColor(ns.cgColor); ctx.setLineWidth(a.lineWidth); ctx.strokeEllipse(in: flip(r, CGFloat(h))) }
             case .highlight:
                 if let r = a.rect { ctx.setFillColor(ns.withAlphaComponent(0.32).cgColor); ctx.fill(flip(r, CGFloat(h))) }
+            case .callout:
+                drawCallout(ctx, a, CGFloat(h), ns)
             case .text:
                 drawText(ctx, a, CGFloat(h))
             }
@@ -630,6 +681,29 @@ struct AnnotateView: View {
         ctx.fillPath()
     }
 
+    private static func drawCallout(_ ctx: CGContext, _ a: Annotation, _ h: CGFloat, _ color: NSColor) {
+        guard a.points.count >= 2 else { drawText(ctx, a, h); return }
+        let s = CGPoint(x: a.points[0].x, y: h - a.points[0].y)   // text anchor
+        let e = CGPoint(x: a.points[1].x, y: h - a.points[1].y)   // target
+        let vx = e.x - s.x, vy = e.y - s.y
+        let len = max(1, sqrt(vx * vx + vy * vy))
+        let ux = vx / len, uy = vy / len
+        let headLen: CGFloat = 22, halfW: CGFloat = 9
+        let base = CGPoint(x: e.x - ux * headLen, y: e.y - uy * headLen)
+        let perpX = -uy, perpY = ux
+        ctx.setStrokeColor(color.cgColor)
+        ctx.setFillColor(color.cgColor)
+        ctx.setLineWidth(a.lineWidth)
+        ctx.setLineCap(.round)
+        ctx.beginPath(); ctx.move(to: s); ctx.addLine(to: base); ctx.strokePath()
+        ctx.beginPath()
+        ctx.move(to: e)
+        ctx.addLine(to: CGPoint(x: base.x + perpX * halfW, y: base.y + perpY * halfW))
+        ctx.addLine(to: CGPoint(x: base.x - perpX * halfW, y: base.y - perpY * halfW))
+        ctx.closePath(); ctx.fillPath()
+        drawText(ctx, a, h)
+    }
+
     private static func drawText(_ ctx: CGContext, _ a: Annotation, _ h: CGFloat) {
         guard let p = a.points.first, !a.text.isEmpty else { return }
         let font = NSFont.systemFont(ofSize: 28, weight: .semibold)
@@ -653,6 +727,7 @@ struct AnnotationLayer: View {
     let isBeingEdited: Bool
     let isHovered: Bool
     let onMove: (CGSize) -> Void
+    let onMoveEnd: () -> Void
     let onResize: (ResizeCorner, CGSize) -> Void
     let onEditText: () -> Void
     let onSelect: () -> Void
@@ -710,6 +785,8 @@ struct AnnotationLayer: View {
                         .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.25)))
                         .position(m.toView(ann.points.first ?? .zero))
                 }
+            case .callout:
+                CalloutLayer(ann: ann, m: m, isBeingEdited: isBeingEdited)
             }
         }
         .overlay { hitSurface }
@@ -728,7 +805,7 @@ struct AnnotationLayer: View {
             .contentShape(Rectangle())
             .gesture(moveGesture)
             .onTapGesture { onSelect() }
-            .onTapGesture(count: 2) { if ann.tool == .text { onEditText() } }
+            .onTapGesture(count: 2) { if ann.tool == .text || ann.tool == .callout { onEditText() } }
             .position(x: h.midX, y: h.midY)
     }
 
@@ -747,7 +824,7 @@ struct AnnotationLayer: View {
                 lastTranslation = v.translation
                 if delta.width != 0 || delta.height != 0 { onMove(delta) }
             }
-            .onEnded { _ in lastTranslation = .zero }
+            .onEnded { _ in lastTranslation = .zero; onMoveEnd() }
     }
 
     @ViewBuilder
@@ -793,6 +870,30 @@ struct ResizeHandle: View {
                     .onEnded { _ in last = .zero }
             )
             .position(position)
+    }
+}
+
+struct CalloutLayer: View {
+    let ann: Annotation
+    let m: Mapping
+    let isBeingEdited: Bool
+
+    var body: some View {
+        let s = m.toView(ann.points.first ?? .zero)
+        let e = m.toView(ann.points.count > 1 ? ann.points[1] : ann.points.first ?? .zero)
+        ZStack {
+            ArrowLineShape(s: s, e: e)
+                .stroke(ann.color, style: StrokeStyle(lineWidth: max(1, ann.lineWidth * m.scale), lineCap: .round))
+            ArrowHeadShape(s: s, e: e).fill(ann.color)
+            if !ann.text.isEmpty && !isBeingEdited {
+                Text(ann.text)
+                    .font(.system(size: 28 * m.scale, weight: .semibold))
+                    .foregroundColor(ann.color)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.35)))
+                    .position(s)
+            }
+        }
     }
 }
 
