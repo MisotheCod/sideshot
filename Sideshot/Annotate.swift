@@ -180,11 +180,7 @@ struct AnnotateView: View {
     @State private var hoveredBlockID: UUID?
     @State private var hoveredAnnotationID: UUID?
     @State private var selectedTextBlockID: UUID?
-    @State private var snapX: CGFloat?
-    @State private var snapY: CGFloat?
-    @State private var dragOffsetID: UUID?
-    @State private var dragRaw: CGSize = .zero
-    @State private var dragOffset: CGSize = .zero
+    @State private var draggingID: UUID?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -229,29 +225,17 @@ struct AnnotateView: View {
                                         isSelected: selectedID == a.id,
                                         isBeingEdited: editingTextID == a.id,
                                         isHovered: hoveredAnnotationID == a.id,
-                                        onMove: { d in moveAnnotation(a.id, by: d, m: m) },
-                                        onMoveEnd: { endMove(m: m) },
+                                        onMoveEnd: { off in commitMove(a.id, offset: off, m: m) },
                                         onResize: { c, d in resizeAnnotation(a.id, c, by: d, m: m) },
                                         onEditText: { startEditingText(a) },
                                         onSelect: { selectedID = a.id },
-                                        dragOffset: dragOffsetID == a.id ? dragOffset : .zero)
-                    }
-
-                    if let gx = snapX {
-                        Rectangle().fill(Color.cyan.opacity(0.85))
-                            .frame(width: 1, height: imgSize.height * m.scale)
-                            .position(x: m.toView(CGPoint(x: gx, y: 0)).x, y: m.dy + imgSize.height * m.scale / 2)
-                    }
-                    if let gy = snapY {
-                        Rectangle().fill(Color.cyan.opacity(0.85))
-                            .frame(width: imgSize.width * m.scale, height: 1)
-                            .position(x: m.dx + imgSize.width * m.scale / 2, y: m.toView(CGPoint(x: 0, y: gy)).y)
+                                        onDragBegan: { draggingID = a.id })
                     }
 
                     if let d = draft {
                         AnnotationLayer(ann: d, m: m, source: cgImage, isSelected: false,
                                         isBeingEdited: false, isHovered: false,
-                                        onMove: { _ in }, onMoveEnd: {}, onResize: { _, _ in }, onEditText: {}, onSelect: {}, dragOffset: .zero)
+                                        onMoveEnd: { _ in }, onResize: { _, _ in }, onEditText: {}, onSelect: {}, onDragBegan: {})
                     }
 
                     if let id = editingTextID,
@@ -279,7 +263,7 @@ struct AnnotateView: View {
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let loc):
-                        if dragOffsetID != nil { return }
+                        if draggingID != nil { return }
                         let ip = m.toImage(loc)
                         hoveredBlockID = liveTextBlocks.first(where: { $0.rect.contains(ip) })?.id
                         hoveredAnnotationID = annotations.first(where: {
@@ -410,44 +394,30 @@ struct AnnotateView: View {
             }
     }
 
-    private func moveAnnotation(_ id: UUID, by viewDelta: CGSize, m: Mapping) {
-        selectedID = id
-        if dragOffsetID != id { dragOffsetID = id; dragRaw = .zero; dragOffset = .zero }
-        dragRaw = CGSize(width: dragRaw.width + viewDelta.width,
-                         height: dragRaw.height + viewDelta.height)
-        guard let a = annotations.first(where: { $0.id == id }) else { return }
+    private func commitMove(_ id: UUID, offset: CGSize, m: Mapping) {
+        guard let i = annotations.firstIndex(where: { $0.id == id }) else { return }
+        var arr = annotations
+        var pts = arr[i].points.map { CGPoint(x: $0.x + offset.width / m.scale,
+                                              y: $0.y + offset.height / m.scale) }
         // Magnetism: snap the annotation's box center/edges to the image center/edges.
-        let box = a.boundingRect
-        let moved = box.offsetBy(dx: dragRaw.width / m.scale, dy: dragRaw.height / m.scale)
+        let xs = pts.map(\.x), ys = pts.map(\.y)
+        let box = CGRect(x: xs.min()!, y: ys.min()!,
+                         width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
         let W = imgSize.width, H = imgSize.height
         let th = 8 / m.scale
-        var adjX: CGFloat = 0, adjY: CGFloat = 0
-        var gx: CGFloat?, gy: CGFloat?
-        for (target, current) in [(W / 2, moved.midX), (0, moved.minX), (W, moved.maxX)] where abs(current - target) < th {
-            adjX = (target - current) * m.scale; gx = target; break
+        for (target, current) in [(W / 2, box.midX), (0, box.minX), (W, box.maxX)] where abs(current - target) < th {
+            let a = target - current
+            pts = pts.map { CGPoint(x: $0.x + a, y: $0.y) }
+            break
         }
-        for (target, current) in [(H / 2, moved.midY), (0, moved.minY), (H, moved.maxY)] where abs(current - target) < th {
-            adjY = (target - current) * m.scale; gy = target; break
+        for (target, current) in [(H / 2, box.midY), (0, box.minY), (H, box.maxY)] where abs(current - target) < th {
+            let a = target - current
+            pts = pts.map { CGPoint(x: $0.x, y: $0.y + a) }
+            break
         }
-        dragOffset = CGSize(width: dragRaw.width + adjX, height: dragRaw.height + adjY)
-        snapX = gx
-        snapY = gy
-    }
-
-    private func endMove(m: Mapping) {
-        if let id = dragOffsetID, dragOffset != .zero,
-           let i = annotations.firstIndex(where: { $0.id == id }) {
-            let dx = dragOffset.width / m.scale
-            let dy = dragOffset.height / m.scale
-            var arr = annotations
-            arr[i].points = arr[i].points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
-            annotations = arr
-        }
-        dragOffsetID = nil
-        dragRaw = .zero
-        dragOffset = .zero
-        snapX = nil
-        snapY = nil
+        arr[i].points = pts
+        annotations = arr
+        draggingID = nil
     }
 
     private func resizeAnnotation(_ id: UUID, _ corner: ResizeCorner, by viewDelta: CGSize, m: Mapping) {
@@ -734,14 +704,15 @@ struct AnnotationLayer: View {
     let isSelected: Bool
     let isBeingEdited: Bool
     let isHovered: Bool
-    let onMove: (CGSize) -> Void
-    let onMoveEnd: () -> Void
+    let onMoveEnd: (CGSize) -> Void
     let onResize: (ResizeCorner, CGSize) -> Void
     let onEditText: () -> Void
     let onSelect: () -> Void
-    let dragOffset: CGSize
+    let onDragBegan: () -> Void
 
     @State private var lastTranslation: CGSize = .zero
+    @State private var localOffset: CGSize = .zero
+    @State private var began = false
 
     var body: some View {
         Group {
@@ -801,7 +772,7 @@ struct AnnotationLayer: View {
         .overlay { hitSurface }
         .overlay { if isSelected || isHovered { halo } }
         .overlay { if isSelected && ann.tool != .text { resizeHandles } }
-        .offset(x: dragOffset.width, y: dragOffset.height)
+        .offset(x: localOffset.width, y: localOffset.height)
     }
 
     private var hitRect: CGRect {
@@ -827,14 +798,24 @@ struct AnnotationLayer: View {
     }
 
     private var moveGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .onChanged { v in
+                if !began { began = true; onDragBegan() }
                 let delta = CGSize(width: v.translation.width - lastTranslation.width,
                                    height: v.translation.height - lastTranslation.height)
                 lastTranslation = v.translation
-                if delta.width != 0 || delta.height != 0 { onMove(delta) }
+                if delta.width != 0 || delta.height != 0 {
+                    localOffset = CGSize(width: localOffset.width + delta.width,
+                                         height: localOffset.height + delta.height)
+                }
             }
-            .onEnded { _ in lastTranslation = .zero; onMoveEnd() }
+            .onEnded { _ in
+                lastTranslation = .zero
+                began = false
+                let off = localOffset
+                localOffset = .zero
+                onMoveEnd(off)
+            }
     }
 
     @ViewBuilder
