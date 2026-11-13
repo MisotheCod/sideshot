@@ -61,13 +61,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     // behind whatever the user is doing and never be seen. Sparkle asks the
     // delegate to "gently" handle those instead, so we put a row in the menu bar.
 
-    func supportsGentleScheduledUpdateReminders() -> Bool { true }
+    // NOTE: this is a readonly @property in the ObjC protocol, not a method.
+    // Declaring it as `func` compiles but never satisfies the protocol, so
+    // Sparkle keeps reporting "does not implement gentle reminders".
+    var supportsGentleScheduledUpdateReminders: Bool { true }
 
     func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem,
                                                              andInImmediateFocus immediateFocus: Bool) -> Bool {
-        // Show the normal alert only when Sideshot genuinely has the user's
-        // attention; otherwise take the gentle path.
-        return immediateFocus
+        // Sideshot is a menu-bar utility: it has no window to anchor an alert to
+        // and is never genuinely "frontmost" in the way a document app is, so
+        // always take the gentle path for scheduled checks. A manual
+        // "Check for Updates…" is not a scheduled update and still shows the
+        // standard UI.
+        return false
     }
 
     func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool,
@@ -76,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         guard !handleShowingUpdate else { return }
         gentleUpdateVersion = update.displayVersionString
         refreshMenu()
+        #if DEBUG
+        let titles = (statusItem.menu?.items ?? []).map { $0.isSeparatorItem ? "---" : $0.title }
+        NSLog("SIDESHOT_GENTLE_REMINDER version=%@ menu=%@", update.displayVersionString, titles.joined(separator: " | "))
+        #endif
     }
 
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
