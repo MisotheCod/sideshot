@@ -29,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         if !others.isEmpty { NSApp.terminate(nil); return }
 
         NSApp.setActivationPolicy(.accessory)
+        // Make sure the icon the system (and Sparkle's update window) shows is
+        // ours. NSImageNameApplicationIcon reads this, and for an accessory
+        // (menu-bar only) app the bundle icon isn't always picked up on its own.
+        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         Recorder.shared.onFinished = { [weak self] url in
             Task { @MainActor in self?.handleFinishedRecording(url) }
         }

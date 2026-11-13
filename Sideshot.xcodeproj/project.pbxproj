@@ -102,6 +102,7 @@
 				7C1F36DBEDDFB24B1B05EF99 /* Sources */,
 				C54F3670BAF87ED6DAA508C4 /* Resources */,
 				B39049366C56A76B413844CD /* Frameworks */,
+				E0E6F0B78942240D94323F76 /* Generate full-size AppIcon.icns */,
 			);
 			buildRules = (
 			);
@@ -161,6 +162,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E0E6F0B78942240D94323F76 /* Generate full-size AppIcon.icns */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate full-size AppIcon.icns";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nSRC=\"${SRCROOT}/Sideshot/Assets.xcassets/AppIcon.appiconset\"\nOUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns\"\nTMPDIR_ICNS=\"$(mktemp -d)/AppIcon.iconset\"\nmkdir -p \"${TMPDIR_ICNS}\"\ncp \"${SRC}\"/icon_16x16.png \"${SRC}\"/icon_16x16@2x.png \\\n   \"${SRC}\"/icon_32x32.png \"${SRC}\"/icon_32x32@2x.png \\\n   \"${SRC}\"/icon_128x128.png \"${SRC}\"/icon_128x128@2x.png \\\n   \"${SRC}\"/icon_256x256.png \"${SRC}\"/icon_256x256@2x.png \\\n   \"${SRC}\"/icon_512x512.png \"${SRC}\"/icon_512x512@2x.png \\\n   \"${TMPDIR_ICNS}/\"\niconutil -c icns \"${TMPDIR_ICNS}\" -o \"${OUT}\"\necho \"AppIcon.icns regenerated: $(ls -l \"${OUT}\" | awk '{print $5}') bytes\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		7C1F36DBEDDFB24B1B05EF99 /* Sources */ = {

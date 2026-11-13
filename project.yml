@@ -45,8 +45,8 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "© 2026 Cam"
-        CFBundleShortVersionString: "0.1.8"
-        CFBundleVersion: "8"
+        CFBundleShortVersionString: "0.1.9"
+        CFBundleVersion: "9"
         SUFeedURL: "https://github.com/MisotheCod/sideshot/releases/latest/download/appcast.xml"
         SUPublicEDKey: "dkk/tUXiZES0c6Zn1MavgX8mUjkITrfw2Ig3jeLvTXI="
         SUEnableAutomaticChecks: true
@@ -54,6 +54,26 @@ targets:
     dependencies:
       - package: Sparkle
         product: Sparkle
+    postBuildScripts:
+      # Xcode does not emit a legacy AppIcon.icns for this target, so a stale
+      # 256px-max file was being shipped (and copied forward every build). Any
+      # consumer reading the .icns — Finder, legacy NSImage paths — got a soft,
+      # mismatched icon. Rebuild a full 16→1024 .icns from the asset catalog.
+      - name: Generate full-size AppIcon.icns
+        script: |
+          set -euo pipefail
+          SRC="${SRCROOT}/Sideshot/Assets.xcassets/AppIcon.appiconset"
+          OUT="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns"
+          TMPDIR_ICNS="$(mktemp -d)/AppIcon.iconset"
+          mkdir -p "${TMPDIR_ICNS}"
+          cp "${SRC}"/icon_16x16.png "${SRC}"/icon_16x16@2x.png \
+             "${SRC}"/icon_32x32.png "${SRC}"/icon_32x32@2x.png \
+             "${SRC}"/icon_128x128.png "${SRC}"/icon_128x128@2x.png \
+             "${SRC}"/icon_256x256.png "${SRC}"/icon_256x256@2x.png \
+             "${SRC}"/icon_512x512.png "${SRC}"/icon_512x512@2x.png \
+             "${TMPDIR_ICNS}/"
+          iconutil -c icns "${TMPDIR_ICNS}" -o "${OUT}"
+          echo "AppIcon.icns regenerated: $(ls -l "${OUT}" | awk '{print $5}') bytes"
 
 schemes:
   Sideshot:
