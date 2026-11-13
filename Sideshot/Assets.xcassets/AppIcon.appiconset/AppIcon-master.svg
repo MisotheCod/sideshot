@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.15" r="0.95">
+      <stop offset="0" stop-color="#46464B"/>
+      <stop offset="0.55" stop-color="#232326"/>
+      <stop offset="1" stop-color="#101012"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="0.85" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.12"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2F8BFF" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#2F6BFF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#2F6BFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7FD4FF"/>
+      <stop offset="0.45" stop-color="#2E8CFF"/>
+      <stop offset="1" stop-color="#3546F0"/>
+    </linearGradient>
+    <linearGradient id="tileRim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="0.7" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#BFE2FF" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.38"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#001A66" stop-opacity="0.22"/>
+    </linearGradient>
+    <radialGradient id="streak" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.82"/>
+      <stop offset="0.5" stop-color="#EAF2FF" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.66"/>
+    </linearGradient>
+    <linearGradient id="spec" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <g filter="url(#drop)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  </g>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="url(#rim)" stroke-width="4"/>
+  <circle cx="480" cy="500" r="360" fill="url(#ambient)"/>
+  <!-- blue glass tile -->
+  <rect x="300" y="316" width="360" height="360" rx="64" fill="#000" opacity="0.35"/>
+  <rect x="300" y="300" width="360" height="360" rx="64" fill="url(#tile)" opacity="0.94"/>
+  <rect x="300" y="300" width="360" height="360" rx="64" fill="url(#sheen)"/>
+  <ellipse cx="420" cy="350" rx="120" ry="34" fill="url(#streak)"/>
+  <rect x="302" y="302" width="356" height="356" rx="62" fill="none" stroke="url(#tileRim)" stroke-width="5"/>
+  <!-- glass brackets -->
+  <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 8)">
+    <path d="M232 352 V292 A60 60 0 0 1 292 232 H352"/>
+    <path d="M672 232 H732 A60 60 0 0 1 792 292 V352"/>
+    <path d="M792 672 V732 A60 60 0 0 1 732 792 H672"/>
+    <path d="M352 792 H292 A60 60 0 0 1 232 732 V672"/>
+  </g>
+  <g fill="none" stroke="url(#glass)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M232 352 V292 A60 60 0 0 1 292 232 H352"/>
+    <path d="M672 232 H732 A60 60 0 0 1 792 292 V352"/>
+    <path d="M792 672 V732 A60 60 0 0 1 732 792 H672"/>
+    <path d="M352 792 H292 A60 60 0 0 1 232 732 V672"/>
+  </g>
+  <g fill="none" stroke="url(#spec)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" transform="translate(-10 -10)">
+    <path d="M232 352 V292 A60 60 0 0 1 292 232 H352"/>
+    <path d="M672 232 H732 A60 60 0 0 1 792 292 V352"/>
+    <path d="M792 672 V732 A60 60 0 0 1 732 792 H672"/>
+    <path d="M352 792 H292 A60 60 0 0 1 232 732 V672"/>
+  </g>
+  <g stroke-linecap="round">
+    <path d="M660 594 V638 M660 682 V726 M594 660 H638 M682 660 H726" stroke="#000" stroke-opacity="0.35" stroke-width="28" transform="translate(0 4)"/>
+    <path d="M660 594 V638 M660 682 V726 M594 660 H638 M682 660 H726" stroke="#0A2A6E" stroke-width="26"/>
+    <path d="M660 594 V638 M660 682 V726 M594 660 H638 M682 660 H726" stroke="#FFFFFF" stroke-width="13"/>
+    <circle cx="660" cy="660" r="8" fill="#FFFFFF" stroke="#0A2A6E" stroke-width="6"/>
+  </g>
+</svg>
