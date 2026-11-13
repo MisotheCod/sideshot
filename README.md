@@ -4,6 +4,12 @@ A clean, native-feeling macOS menu-bar app for screenshots and screen recordings
 
 Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkeys. No telemetry, no accounts, no cloud.
 
+<p align="center">
+  <a href="docs/sideshot-promo.mp4"><img src="docs/sideshot-promo.webp" alt="Sideshot — capture, copy straight from the side stack, then annotate" width="100%"></a>
+</p>
+
+<p align="center"><sub><a href="docs/sideshot-promo.mp4">▶ Watch the 38s promo with sound</a></sub></p>
+
 ## Screenshots
 
 ![Sideshot onboarding](docs/screenshots/onboarding.png)
@@ -20,7 +26,7 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
   - `Esc` — cancel any in-progress capture or recording
 - **Window capture** — every window dims, the one under your cursor lights up, click to snap it.
 - **Floating side stack** — results stack on the screen edge (newest at the bottom). Hover to **Copy** or **Save**; drag a card out to export it anywhere.
-- **Annotate** — double-click any screenshot to mark it up before sharing: arrow, rectangle, highlighter, freehand pen, text, and blur (for redacting sensitive bits). Undo/redo, keyboard shortcuts, live pixelation.
+- **Annotate** — double-click any screenshot to mark it up before sharing: selector, arrow, line, rectangle, ellipse, highlighter, freehand pen, text, **callout** (label + leader arrow), and blur (for redacting sensitive bits). Adjustable colors and three stroke widths, drag-to-move with snapping to the image centre and edges, corner resize handles, delete key, undo/redo, and live pixelation.
 - **Recording** — stops into the stack as an unsaved card (nothing is saved until you say so).
 - **QuickTime-style editor** — scrub and trim recordings on one strip, then **Save As…**.
 - **Naming** — `SS_MMMddyy_HH.mm.png` / `SR_MMMddyy_HH.mm.mov` (e.g. `SS_Oct1826_13.05.png`), with a `_2` suffix on collisions.
