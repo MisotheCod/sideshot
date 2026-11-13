@@ -10,12 +10,6 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
 
 <p align="center"><sub><a href="docs/sideshot-promo.mp4">▶ Watch the 38s promo with sound</a></sub></p>
 
-## Screenshots
-
-![Sideshot onboarding](docs/screenshots/onboarding.png)
-
-![Sideshot video editor — scrub and trim recordings](docs/screenshots/editor.png)
-
 ## Features
 
 - **Menu-bar app** — no Dock icon; lives in the status bar.
@@ -34,13 +28,13 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
 
 ## Download
 
-Grab the latest build from the [Releases](../../releases) page: unzip, drag **Sideshot.app** to `/Applications`.
+**[Download the latest release](../../releases/latest)** — unzip, then drag **Sideshot.app** into `/Applications`.
 
-**Sideshot updates itself.** From v0.1.5 onward it checks for a new version once a day and offers to install it — no re-downloading. There's also **Check for Updates…** in the menu bar. Updates are EdDSA-signed by Sparkle and verified before they install.
+Requires **macOS 14 (Sonoma) or later**. Universal build, Apple silicon and Intel.
 
-> v0.1.4 and earlier have no updater inside them, so moving to v0.1.5 is the last manual install.
+**Sideshot updates itself.** It checks for a new version once a day and, when there is one, adds a row at the top of its menu: *Sideshot x.y.z is available…*. No re-downloading, no update dialog to miss — everything is EdDSA-signed by [Sparkle](https://sparkle-project.org) and verified before it installs. **Check for Updates…** in the menu forces a check.
 
-> Because the builds are locally signed (not Apple-notarized), macOS Gatekeeper will complain on first launch: **right-click → Open**, then confirm. Then grant **Screen Recording** permission in *System Settings → Privacy & Security → Screen Recording* (required for capture and recording).
+> Because the builds are locally signed (not Apple-notarized), macOS Gatekeeper complains on first launch: **right-click → Open**, then confirm. Then grant **Screen Recording** in *System Settings → Privacy & Security → Screen and System Audio Recording* — required for capture and recording. If you ever need to revoke it, quit Sideshot first, otherwise macOS may leave the entry in place.
 
 ## Releasing
 
