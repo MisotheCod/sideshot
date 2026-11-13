@@ -3,11 +3,14 @@ import Carbon
 import ScreenCaptureKit
 import Sparkle
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let thumbnails = ThumbnailManager()
     private var updaterController: SPUStandardUpdaterController?
+    /// Set when Sparkle finds an update while Sideshot isn't frontmost, so we can
+    /// surface it in the menu bar instead of popping an alert nobody is looking at.
+    private var gentleUpdateVersion: String?
     private var selectionWindow: SelectionOverlayWindow?
     private var recordingSelection = false
     private var recordIndicator: RecordIndicator?
@@ -37,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sparkle: background update checks, plus a manual menu item.
         updaterController = SPUStandardUpdaterController(startingUpdater: true,
                                                         updaterDelegate: nil,
-                                                        userDriverDelegate: nil)
+                                                        userDriverDelegate: self)
         if !UserDefaults.standard.bool(forKey: "DidShowOnboarding") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showOnboarding() }
         }
@@ -50,6 +53,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func checkForUpdates() {
         updaterController?.checkForUpdates(nil)
+    }
+
+    // MARK: - Sparkle gentle reminders
+    //
+    // Sideshot is an LSUIElement menu-bar app: a scheduled-update alert can open
+    // behind whatever the user is doing and never be seen. Sparkle asks the
+    // delegate to "gently" handle those instead, so we put a row in the menu bar.
+
+    func supportsGentleScheduledUpdateReminders() -> Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem,
+                                                             andInImmediateFocus immediateFocus: Bool) -> Bool {
+        // Show the normal alert only when Sideshot genuinely has the user's
+        // attention; otherwise take the gentle path.
+        return immediateFocus
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool,
+                                                   forUpdate update: SUAppcastItem,
+                                                   state: SPUUserUpdateState) {
+        guard !handleShowingUpdate else { return }
+        gentleUpdateVersion = update.displayVersionString
+        refreshMenu()
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        clearGentleReminder()
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        clearGentleReminder()
+    }
+
+    private func clearGentleReminder() {
+        guard gentleUpdateVersion != nil else { return }
+        gentleUpdateVersion = nil
+        refreshMenu()
+    }
+
+    private func refreshMenu() {
+        guard statusItem != nil else { return }
+        statusItem.menu = buildMenu()
     }
 
     private func setupStatusItem() {
@@ -68,6 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             it.keyEquivalentModifierMask = mods
             it.target = self
             return it
+        }
+
+        if let v = gentleUpdateVersion {
+            menu.addItem(item("Sideshot \(v) is available…", #selector(checkForUpdates)))
+            menu.addItem(.separator())
         }
 
         menu.addItem(item("Capture Area", #selector(captureArea), key: "4", mods: [.command, .shift]))
