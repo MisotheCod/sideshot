@@ -216,12 +216,12 @@
         <div class="card" id="c2" style="left:64px;top:470px">
           <div class="shot"><div class="ct">Invoices</div><div class="r m"></div><div class="r s"></div><div class="r m"></div><div class="r s"></div></div>
           <div class="meta" data-layout-ignore>Screenshot 2</div>
-          <div class="acts" id="acts" data-layout-ignore><span class="pill copy">Copy</span><span class="pill save">Save</span></div>
-          <div class="check" id="check">&#10003;</div>
         </div>
         <div class="card" id="c3" style="left:64px;top:714px">
           <div class="shot"><div class="ct">Invoices</div><div class="r m"></div><div class="r s"></div></div>
           <div class="meta" data-layout-ignore>Screenshot 1</div>
+          <div class="acts" id="acts" data-layout-ignore><span class="pill copy">Copy</span><span class="pill save">Save</span></div>
+          <div class="check" id="check">&#10003;</div>
         </div>
 
         <div class="caption" id="s3cap">It doesn't vanish. <b>It waits on the side.</b></div>
@@ -339,12 +339,17 @@
       tl.fromTo(["#c1", "#c2", "#c3"], { x: -80, opacity: 0 },
         { x: 0, opacity: 1, duration: 0.7, stagger: 0.12, ease: "power3.out" }, 14.3);
       tl.to("#s3cap", { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, 15.0);
+      // hover the BOTTOM card of the stack
       tl.to("#acts", { opacity: 1, duration: 0.35, ease: "power2.out" }, 16.3);
-      tl.to("#c2", { scale: 1.03, duration: 0.3, ease: "power2.out" }, 16.3);
+      tl.to("#c3", { scale: 1.03, duration: 0.3, ease: "power2.out" }, 16.3);
       tl.to("#acts", { opacity: 0, duration: 0.18 }, 17.5);
       tl.to("#check", { opacity: 1, duration: 0.2 }, 17.6);
-      tl.to("#c2", { x: -440, opacity: 0, duration: 0.62, ease: "power3.in" }, 18.3);
-      tl.to("#s3cap", { opacity: 0, y: -12, duration: 0.4 }, 19.9);
+      // bottom card copies and slides out of frame
+      tl.to("#c3", { x: -440, opacity: 0, duration: 0.62, ease: "power3.in" }, 18.3);
+      // the two above fall down to fill the space
+      tl.to("#c2", { y: 244, duration: 0.6, ease: "power2.inOut" }, 18.95);
+      tl.to("#c1", { y: 244, duration: 0.6, ease: "power2.inOut" }, 19.08);
+      tl.to("#s3cap", { opacity: 0, y: -12, duration: 0.4 }, 20.05);
 
       /* S4 */
       tl.fromTo("#editor", { opacity: 0, y: 34, scale: 0.975 },
