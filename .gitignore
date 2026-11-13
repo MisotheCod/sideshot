@@ -1,1 +1,4 @@
 promo/audio/*_t.mp3
+
+# Build output — releases carry the app; source builds it.
+Sideshot.app/

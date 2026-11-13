@@ -36,7 +36,15 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
 
 Grab the latest build from the [Releases](../../releases) page: unzip, drag **Sideshot.app** to `/Applications`.
 
+**Sideshot updates itself.** From v0.1.5 onward it checks for a new version once a day and offers to install it — no re-downloading. There's also **Check for Updates…** in the menu bar. Updates are EdDSA-signed by Sparkle and verified before they install.
+
+> v0.1.4 and earlier have no updater inside them, so moving to v0.1.5 is the last manual install.
+
 > Because the builds are locally signed (not Apple-notarized), macOS Gatekeeper will complain on first launch: **right-click → Open**, then confirm. Then grant **Screen Recording** permission in *System Settings → Privacy & Security → Screen Recording* (required for capture and recording).
+
+## Releasing
+
+`./release.sh "notes"` builds, signs the archive, writes `appcast.xml` and cuts the GitHub release. Every release must carry `appcast.xml` as an asset — the app polls `releases/latest/download/appcast.xml`, so a release without it is a 404 for every installed copy.
 
 ## Build from source
 
