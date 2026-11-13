@@ -1,14 +1,28 @@
 # Sideshot
 
-A clean, native-feeling macOS menu-bar app for screenshots and screen recordings. Capture, then the result floats in a stack on the side of your screen — copy it, save it, drag it out, or trim a recording — without macOS's noisy default capture flow.
+**Every screenshot tool gets the capture right. The annoying part is everything after it.**
 
-Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkeys. No telemetry, no accounts, no cloud.
+On macOS, `⌘⇧4` takes the picture and then abandons you. A thumbnail blinks in the corner and disappears before you decide what to do with it. The file lands on your Desktop under a name you didn't pick. To actually *send* that screenshot you have to find it, open it, mark it up in another app, save it again, then drag it out of a folder.
+
+Sideshot fixes the middle part. A capture doesn't become a file you have to hunt for — it becomes a card stacked on the edge of your screen, waiting for you to decide: copy it, save it, drag it out, annotate it, or throw it away. Nothing touches your Desktop unless you say so.
 
 <p align="center">
   <a href="docs/sideshot-promo.mp4"><img src="docs/sideshot-promo.webp" alt="Sideshot — capture, copy straight from the side stack, then annotate" width="100%"></a>
 </p>
 
 <p align="center"><sub><a href="docs/sideshot-promo.mp4">▶ Watch the 38s promo with sound</a></sub></p>
+
+## What it actually solves
+
+| The thing that's annoying | What Sideshot does instead |
+|---|---|
+| The floating thumbnail vanishes before you've decided what to do with it | Captures wait in a stack on the edge of the screen until *you* act on them |
+| Every screenshot becomes another file cluttering your Desktop | Nothing is saved unless you choose to save it |
+| Sending one means a round trip through Finder and Preview | Hover the card, hit **Copy** — it's on your clipboard and the card slides away |
+| Marking something up means opening a second app and losing the capture | Annotations are built in: arrows, callouts, text, highlight, blur |
+| Sensitive details (a customer, an amount, a token) leak before you notice | Blur and redact in place, before it ever leaves the app |
+| Screen recording lands a file on your Desktop that you still have to trim | Recordings stop into the stack as unsaved cards, and trim right there |
+| Copying text out of a screenshot means retyping it | Live Text reads the image — select and copy the words, or click a link |
 
 ## Features
 
@@ -19,12 +33,19 @@ Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkey
   - `⌘⇧5` — record (screen / window / area)
   - `Esc` — cancel any in-progress capture or recording
 - **Window capture** — every window dims, the one under your cursor lights up, click to snap it.
-- **Floating side stack** — results stack on the screen edge (newest at the bottom). Hover to **Copy** or **Save**; drag a card out to export it anywhere.
+- **Floating side stack** — results stack on the screen edge (newest at the bottom). Hover to **Copy** or **Save**; drag a card out to export it anywhere; double-click for a full preview.
 - **Annotate** — double-click any screenshot to mark it up before sharing: selector, arrow, line, rectangle, ellipse, highlighter, freehand pen, text, **callout** (label + leader arrow), and blur (for redacting sensitive bits). Adjustable colors and three stroke widths, drag-to-move with snapping to the image centre and edges, corner resize handles, delete key, undo/redo, and live pixelation.
+- **Live Text** — the screenshot is read with Vision, so you can select and copy text straight out of the image, and click links to open them.
 - **Recording** — stops into the stack as an unsaved card (nothing is saved until you say so).
 - **QuickTime-style editor** — scrub and trim recordings on one strip, then **Save As…**.
 - **Naming** — `SS_MMMddyy_HH.mm.png` / `SR_MMMddyy_HH.mm.mov` (e.g. `SS_Oct1826_13.05.png`), with a `_2` suffix on collisions.
 - **Choose your save location** from the menu bar.
+
+## Privacy
+
+No telemetry, no accounts, no cloud. Captures never leave your Mac — text recognition and OCR run on-device through Apple's Vision framework.
+
+Built with **ScreenCaptureKit**, native SwiftUI/AppKit, and Carbon global hotkeys.
 
 ## Download
 
