@@ -19,6 +19,11 @@ SPARKLE_DIR="${SPARKLE_DIR:-/tmp/sparkle}"
 
 cd "$(dirname "$0")"
 
+# Regenerate FIRST: Info.plist is produced by xcodegen from project.yml, so
+# reading the version before this would pick up the previous release's value.
+echo "==> Generating project"
+xcodegen generate >/dev/null
+
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sideshot/Info.plist)
 BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Sideshot/Info.plist)
 TAG="v${VERSION}"
@@ -38,9 +43,6 @@ if [[ ! -x "${SPARKLE_DIR}/bin/generate_appcast" ]]; then
     "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VER}/Sparkle-${SPARKLE_VER}.tar.xz"
   tar -xf "${SPARKLE_DIR}/sparkle.tar.xz" -C "${SPARKLE_DIR}"
 fi
-
-echo "==> Generating project"
-xcodegen generate >/dev/null
 
 echo "==> Building (universal, Release)"
 xcodebuild -project Sideshot.xcodeproj -scheme Sideshot -configuration Release \
