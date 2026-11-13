@@ -29,6 +29,11 @@ targets:
       - path: Sideshot
     entitlements:
       path: Sideshot/Sideshot.entitlements
+      properties:
+        # Sparkle.framework is ad-hoc signed (no Developer ID); Hardened Runtime's
+        # library validation otherwise refuses to load it. Safe for a non-sandboxed
+        # local app. Remove once releases are signed with a Developer ID.
+        com.apple.security.cs.disable-library-validation: true
     settings:
       base:
         CODE_SIGN_ENTITLEMENTS: Sideshot/Sideshot.entitlements
@@ -40,8 +45,15 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "© 2026 Cam"
-        CFBundleShortVersionString: "0.1.4"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "0.1.5"
+        CFBundleVersion: "5"
+        SUFeedURL: "https://github.com/MisotheCod/sideshot/releases/latest/download/appcast.xml"
+        SUPublicEDKey: "dkk/tUXiZES0c6Zn1MavgX8mUjkITrfw2Ig3jeLvTXI="
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
+    dependencies:
+      - package: Sparkle
+        product: Sparkle
 
 schemes:
   Sideshot:
@@ -53,4 +65,7 @@ schemes:
     archive:
       config: Release
 
-packages: {}
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.1

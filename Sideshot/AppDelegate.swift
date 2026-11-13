@@ -1,11 +1,13 @@
 import AppKit
 import Carbon
 import ScreenCaptureKit
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let thumbnails = ThumbnailManager()
+    private var updaterController: SPUStandardUpdaterController?
     private var selectionWindow: SelectionOverlayWindow?
     private var recordingSelection = false
     private var recordIndicator: RecordIndicator?
@@ -32,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setupStatusItem()
         registerHotkeys()
+        // Sparkle: background update checks, plus a manual menu item.
+        updaterController = SPUStandardUpdaterController(startingUpdater: true,
+                                                        updaterDelegate: nil,
+                                                        userDriverDelegate: nil)
         if !UserDefaults.standard.bool(forKey: "DidShowOnboarding") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showOnboarding() }
         }
@@ -41,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Menu
+
+    @objc private func checkForUpdates() {
+        updaterController?.checkForUpdates(nil)
+    }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -76,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Choose Save Location…", #selector(chooseSaveLocation)))
         menu.addItem(.separator())
         menu.addItem(item("Welcome…", #selector(showOnboardingAction)))
+        menu.addItem(.separator())
+        menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: "Quit Sideshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))

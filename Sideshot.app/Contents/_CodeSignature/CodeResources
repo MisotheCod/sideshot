@@ -15,6 +15,15 @@
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>Frameworks/Sparkle.framework</key>
+		<dict>
+			<key>cdhash</key>
+			<data>
+			lodL8SL5KaskEVW80dCG1r3YIUA=
+			</data>
+			<key>requirement</key>
+			<string>cdhash H"96874bf122f929ab241155bcd1d086d6bdd82140" or cdhash H"4d254b3730d38456033b4cad6a84ebaeff658d04"</string>
+		</dict>
 		<key>Resources/AppIcon.icns</key>
 		<dict>
 			<key>hash2</key>
