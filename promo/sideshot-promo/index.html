@@ -6,147 +6,145 @@
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
     <style>
       :root {
-        --ground: #07080b;
-        --panel: #101319;
-        --panel2: #171b23;
-        --line: #232833;
-        --ink: #f6f8fb;
-        --muted: #8d94a5;
-        --blue: #366ae1;
-        --blue-lt: #5aa0f5;
+        --ground: #07080b; --panel: #101319; --line: #232833;
+        --ink: #f6f8fb; --muted: #8d94a5; --blue: #366ae1; --blue-lt: #5aa0f5;
         --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        width: 1920px; height: 1080px; overflow: hidden;
-        background: var(--ground); font-family: var(--font);
-        -webkit-font-smoothing: antialiased;
-      }
+      html, body { width: 1920px; height: 1080px; overflow: hidden;
+        background: var(--ground); font-family: var(--font); -webkit-font-smoothing: antialiased; }
       #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
-
-      /* ---------- shared ---------- */
       .scene { position: absolute; inset: 0; }
-      .glow {
-        position: absolute; border-radius: 50%; filter: blur(120px);
-        background: radial-gradient(circle, rgba(54,106,225,.55), rgba(90,160,245,0) 70%);
-      }
-      .caption {
-        position: absolute; left: 0; right: 0; bottom: 92px;
-        text-align: center; font-size: 34px; font-weight: 500;
-        color: var(--muted); letter-spacing: -0.01em;
-      }
+      .glow { position: absolute; border-radius: 50%; filter: blur(120px);
+        background: radial-gradient(circle, rgba(54,106,225,.55), rgba(90,160,245,0) 70%); }
+      .caption { position: absolute; left: 0; right: 0; bottom: 78px; text-align: center;
+        font-size: 34px; font-weight: 500; color: var(--muted); letter-spacing: -0.01em; }
       .caption b { color: var(--ink); font-weight: 600; }
-      .kbd {
-        display: inline-flex; align-items: center; justify-content: center;
-        min-width: 74px; height: 74px; padding: 0 20px; margin: 0 7px;
-        border-radius: 16px; background: linear-gradient(180deg,#242a35,#14181f);
-        border: 1px solid #313744; border-bottom-color: #12151b;
-        box-shadow: 0 6px 0 #0b0d12, 0 12px 26px rgba(0,0,0,.55);
-        color: var(--ink); font-size: 40px; font-weight: 600;
-      }
+      .kbd { display: inline-flex; align-items: center; justify-content: center;
+        min-width: 74px; height: 74px; padding: 0 20px; margin: 0 7px; border-radius: 16px;
+        background: linear-gradient(180deg,#242a35,#14181f); border: 1px solid #313744;
+        border-bottom-color: #12151b; box-shadow: 0 6px 0 #0b0d12, 0 12px 26px rgba(0,0,0,.55);
+        color: var(--ink); font-size: 40px; font-weight: 600; }
 
-      /* ---------- scene 1 : logo ---------- */
+      /* ---------- S1 ---------- */
       #s1 .stack { position: absolute; inset: 0; display: flex; flex-direction: column;
         align-items: center; justify-content: center; }
-      #logo { width: 238px; height: 238px; border-radius: 48px;
+      #logo { width: 238px; height: 238px; border-radius: 52px;
         box-shadow: 0 40px 90px rgba(54,106,225,.35), 0 8px 26px rgba(0,0,0,.6); }
-      #word { margin-top: 46px; font-size: 122px; font-weight: 700; letter-spacing: -0.045em;
-        color: var(--ink); }
-      #tag { margin-top: 22px; font-size: 42px; font-weight: 500; color: #b9c2d4;
-        letter-spacing: -0.015em; }
+      #word { margin-top: 46px; font-size: 122px; font-weight: 700; letter-spacing: -0.045em; color: var(--ink); }
+      #tag { margin-top: 22px; font-size: 42px; font-weight: 500; color: #b9c2d4; letter-spacing: -0.015em; }
 
-      /* ---------- scene 2 : capture ---------- */
-      #s2 .desk { position: absolute; inset: 0; background:
-        radial-gradient(1200px 700px at 50% 22%, #141926 0%, #07080b 70%); }
-      .macwin {
-        position: absolute; left: 50%; top: 50%; width: 1180px; height: 700px;
-        transform: translate(-50%,-50%);
-        background: #0d1016; border: 1px solid var(--line); border-radius: 18px;
-        box-shadow: 0 50px 120px rgba(0,0,0,.72); overflow: hidden;
-      }
-      .macbar { height: 52px; display: flex; align-items: center; gap: 10px;
-        padding: 0 20px; border-bottom: 1px solid var(--line); background: #0a0d12; }
+      /* ---------- S2: realistic app being captured ---------- */
+      .macwin { position: absolute; left: 50%; top: 50%; width: 1300px; height: 780px;
+        transform: translate(-50%,-50%); background: #0d1016; border: 1px solid var(--line);
+        border-radius: 18px; box-shadow: 0 50px 130px rgba(0,0,0,.78); overflow: hidden; }
+      .macbar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 20px;
+        border-bottom: 1px solid var(--line); background: #0a0d12; }
       .dot { width: 14px; height: 14px; border-radius: 50%; }
       .d1 { background: #ff5f57; } .d2 { background: #febc2e; } .d3 { background: #28c840; }
-      .macbody { padding: 44px 56px; }
-      .h { height: 20px; border-radius: 6px; background: #1c2230; margin-bottom: 18px; }
-      .p { height: 12px; border-radius: 5px; background: #151a24; margin-bottom: 14px; }
-      #marquee {
-        position: absolute; border: 2px dashed var(--blue-lt);
-        background: rgba(90,160,245,.10); box-shadow: 0 0 0 9999px rgba(0,0,0,.34);
-        border-radius: 6px; transform-origin: left top;
-      }
+      .urlbar { margin-left: 16px; height: 26px; flex: 1; max-width: 420px; border-radius: 7px;
+        background: #11151d; border: 1px solid #1e2430; display: flex; align-items: center;
+        padding: 0 12px; font-size: 13px; color: #5d677a; }
+
+      .app { display: flex; height: calc(100% - 52px); background: #f6f7f9; }
+      .side { width: 216px; background: #ffffff; border-right: 1px solid #e5e8ee; padding: 22px 16px; }
+      .brand { font-size: 19px; font-weight: 700; color: #14203a; padding: 0 10px 20px; }
+      .navi { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px;
+        border-radius: 8px; font-size: 15px; color: #5d6a80; margin-bottom: 4px; }
+      .navi.on { background: #eef2fb; color: #2a4fa8; font-weight: 600; }
+      .navi i { width: 16px; height: 16px; border-radius: 4px; background: #c9d2e2; }
+      .navi.on i { background: #366ae1; }
+
+      .main2 { flex: 1; padding: 26px 30px; }
+      .mhead { display: flex; align-items: center; justify-content: space-between; }
+      .mhead h3 { font-size: 24px; font-weight: 700; color: #14203a; letter-spacing: -0.02em; }
+      .btnp { height: 34px; padding: 0 16px; border-radius: 8px; background: #366ae1;
+        color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; }
+      .stats { display: flex; gap: 14px; margin: 20px 0 18px; }
+      .stat { flex: 1; background: #fff; border: 1px solid #e5e8ee; border-radius: 10px; padding: 14px 16px; }
+      .stat .k { font-size: 12px; color: #7b8798; text-transform: uppercase; letter-spacing: .06em; }
+      .stat .v { font-size: 26px; font-weight: 700; color: #14203a; margin-top: 6px; letter-spacing: -0.02em; }
+      .tbl { background: #fff; border: 1px solid #e5e8ee; border-radius: 10px; overflow: hidden; }
+      .tr { display: flex; align-items: center; padding: 13px 18px; border-bottom: 1px solid #eef1f5;
+        font-size: 15px; color: #35405a; }
+      .tr:last-child { border-bottom: none; }
+      .tr.hd { background: #fafbfd; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+        color: #8b96a8; font-weight: 600; }
+      .c1 { flex: 2.2; } .c2 { flex: 1.1; } .c3 { flex: 1; } .c4 { flex: 1; text-align: right; }
+      .pill2 { display: inline-flex; align-items: center; height: 24px; padding: 0 10px;
+        border-radius: 999px; font-size: 12px; font-weight: 600; }
+      .paid { background: #e6f7ee; color: #15834a; }
+      .due { background: #fff3e2; color: #a86312; }
+      .over { background: #fdeaea; color: #b32b2b; }
+      #marquee { position: absolute; border: 2px dashed var(--blue-lt);
+        background: rgba(90,160,245,.10); box-shadow: 0 0 0 9999px rgba(0,0,0,.36);
+        border-radius: 6px; transform-origin: left top; }
       #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
 
       /* ---------- cards ---------- */
-      .card {
-        position: absolute; width: 276px; height: 202px; border-radius: 14px;
+      .card { position: absolute; width: 288px; height: 212px; border-radius: 14px;
         background: #0c0f14; border: 1px solid #2a3040; overflow: hidden;
-        box-shadow: 0 18px 40px rgba(0,0,0,.55);
-      }
-      .card .shot { position: absolute; inset: 8px 8px 30px 8px; border-radius: 8px;
-        background: linear-gradient(150deg,#22304d,#101722); overflow: hidden; }
-      .card .shot i { display: block; height: 7px; border-radius: 4px; background: rgba(255,255,255,.12);
-        margin: 12px 14px; }
-      .card .meta { position: absolute; left: 12px; bottom: 9px; font-size: 14px;
-        color: #6f7a90; }
+        box-shadow: 0 18px 44px rgba(0,0,0,.6); }
+      .card .shot { position: absolute; inset: 8px 8px 34px 8px; border-radius: 8px;
+        background: #f6f7f9; overflow: hidden; padding: 10px; }
+      .card .shot .ct { font-size: 11px; font-weight: 700; color: #14203a; margin-bottom: 8px; }
+      .card .shot .r { height: 13px; border-radius: 3px; background: #e2e7f0; margin-bottom: 6px; }
+      .card .shot .r.s { width: 62%; } .card .shot .r.m { width: 84%; }
+      .card .meta { position: absolute; left: 12px; bottom: 10px; font-size: 15px; color: #6f7a90; }
       .card .acts { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 7px; opacity: 0; }
-      .pill { height: 30px; padding: 0 14px; border-radius: 9px; display: flex;
-        align-items: center; font-size: 14px; font-weight: 600; }
+      .pill { height: 32px; padding: 0 15px; border-radius: 9px; display: flex; align-items: center;
+        font-size: 15px; font-weight: 600; }
       .pill.copy { background: var(--blue); color: #fff; }
       .pill.save { background: #212836; color: #c6cede; }
-      .check { position: absolute; right: 12px; bottom: 9px; font-size: 20px; color: #35d07f; opacity: 0; }
+      .check { position: absolute; right: 14px; bottom: 10px; font-size: 22px; color: #35d07f; opacity: 0; }
 
-      /* ---------- scene 4 : editor ---------- */
-      .editor {
-        position: absolute; left: 50%; top: 46%; width: 1420px; height: 800px;
-        transform: translate(-50%,-50%);
-        background: #0b0e13; border: 1px solid #262c39; border-radius: 16px;
-        box-shadow: 0 60px 140px rgba(0,0,0,.8); overflow: hidden;
-      }
-      .ebar { height: 62px; display: flex; align-items: center; gap: 6px;
-        padding: 0 14px; background: #14181f; border-bottom: 1px solid #262c39; }
-      .tool { width: 42px; height: 42px; border-radius: 9px; display: flex;
-        align-items: center; justify-content: center; }
-      .tool.on { background: #2b3446; }
-      .tool svg { width: 21px; height: 21px; stroke: #b9c2d4; fill: none;
-        stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-      .tool.on svg { stroke: #fff; }
+      /* ---------- S4 editor ---------- */
+      .editor { position: absolute; left: 50%; top: 46%; width: 1460px; height: 810px;
+        transform: translate(-50%,-50%); background: #0b0e13; border: 1px solid #262c39;
+        border-radius: 16px; box-shadow: 0 60px 140px rgba(0,0,0,.82); overflow: hidden; }
+      .ebar { height: 64px; display: flex; align-items: center; gap: 5px; padding: 0 14px;
+        background: #14181f; border-bottom: 1px solid #262c39; position: relative; }
+      .tool { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center;
+        justify-content: center; position: relative; z-index: 3; }
+      .tool svg { width: 21px; height: 21px; stroke: #b9c2d4; fill: none; stroke-width: 1.9;
+        stroke-linecap: round; stroke-linejoin: round; }
+      #toolring { position: absolute; width: 44px; height: 44px; border-radius: 10px;
+        background: #2b3446; z-index: 2; top: 10px; left: 14px; opacity: 0; }
       .sep { width: 1px; height: 26px; background: #2a3140; margin: 0 8px; }
-      .ebtn { height: 36px; padding: 0 18px; border-radius: 9px; display: flex;
-        align-items: center; font-size: 15px; font-weight: 600; }
+      .ebtn { height: 36px; padding: 0 18px; border-radius: 9px; display: flex; align-items: center;
+        font-size: 15px; font-weight: 600; margin-left: 8px; }
       .ebtn.save { background: #232a38; color: #cfd7e6; }
       .ebtn.copy { background: var(--blue); color: #fff; }
-      .ecanvas { position: absolute; inset: 62px 0 0 0; background: #eef1f5; }
-      .ecanvas .txt { position: absolute; left: 92px; top: 78px; width: 660px; }
-      .ecanvas .txt .l { height: 15px; border-radius: 5px; background: #c4ccd9; margin-bottom: 16px; }
-      .ecanvas .txt .l.dark { background: #96a2b5; }
-      .ecanvas .panel { position: absolute; right: 92px; top: 78px; width: 460px; height: 300px;
-        border-radius: 12px; background: #fff; border: 1px solid #d6dbe4;
-        box-shadow: 0 10px 30px rgba(20,30,50,.08); padding: 28px; }
-      .ecanvas .panel .b { height: 13px; border-radius: 5px; background: #dbe1ea; margin-bottom: 14px; }
-      .ecanvas .panel .big { height: 44px; width: 150px; border-radius: 8px; background: #366ae1; margin: 18px 0; }
+      .ecanvas { position: absolute; inset: 64px 0 0 0; background: #eef1f5; }
 
-      /* ---------- scene 5 ---------- */
+      /* the screenshot inside the editor */
+      .shot2 { position: absolute; left: 46px; top: 34px; width: 1368px; height: 700px;
+        background: #f6f7f9; border-radius: 10px; border: 1px solid #dfe4ec; overflow: hidden; }
+      .shot2 .top { height: 54px; background: #fff; border-bottom: 1px solid #e5e8ee;
+        display: flex; align-items: center; padding: 0 24px; justify-content: space-between; }
+      .shot2 .top .t { font-size: 20px; font-weight: 700; color: #14203a; }
+      .shot2 .body2 { padding: 20px 24px; }
+      .row2 { display: flex; align-items: center; padding: 16px 18px; background: #fff;
+        border: 1px solid #e5e8ee; border-radius: 9px; margin-bottom: 10px; font-size: 17px; color: #35405a; }
+      .row2 .n { flex: 2; font-weight: 600; color: #14203a; }
+      .row2 .d2 { flex: 1.2; color: #7b8798; }
+      .row2 .a { flex: 1; text-align: right; font-weight: 700; color: #14203a; }
+      .row2 .s { flex: 1; text-align: right; }
+
+      /* ---------- S5 ---------- */
       #s5 .end { position: absolute; inset: 0; display: flex; flex-direction: column;
         align-items: center; justify-content: center; }
-      #logo2 { width: 168px; height: 168px; border-radius: 38px;
-        box-shadow: 0 30px 80px rgba(54,106,225,.4); }
-      #endtitle { margin-top: 38px; font-size: 96px; font-weight: 700;
-        letter-spacing: -0.045em; color: var(--ink); }
-      #endsub { margin-top: 16px; font-size: 36px; color: var(--muted); font-weight: 450; }
-      #endurl { margin-top: 40px; font-size: 30px; font-weight: 600; color: var(--blue-lt);
-        letter-spacing: .01em; }
-      .badge { display: inline-flex; align-items: center; gap: 10px; margin-top: 34px;
-        padding: 12px 22px; border-radius: 999px; border: 1px solid #2b3446;
-        background: #101520; font-size: 22px; color: #a9b3c6; }
+      #logo2 { width: 168px; height: 168px; border-radius: 38px; box-shadow: 0 30px 80px rgba(54,106,225,.4); }
+      #endtitle { margin-top: 38px; font-size: 96px; font-weight: 700; letter-spacing: -0.045em; color: var(--ink); }
+      #endsub { margin-top: 16px; font-size: 36px; color: #b9c2d4; font-weight: 500; }
+      #endurl { margin-top: 40px; font-size: 30px; font-weight: 600; color: var(--blue-lt); letter-spacing: .01em; }
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="34"
+    <div id="root" data-composition-id="main" data-start="0" data-duration="38"
          data-width="1920" data-height="1080">
 
-      <!-- ================= SCENE 1 ================= -->
+      <!-- S1 -->
       <div id="s1" class="scene clip" data-start="0" data-duration="5.5" data-track-index="0">
         <div class="glow" id="s1glow" style="width:900px;height:900px;left:510px;top:90px;opacity:.55"></div>
         <div class="stack">
@@ -156,65 +154,85 @@
         </div>
       </div>
 
-      <!-- ================= SCENE 2 : capture ================= -->
-      <div id="s2" class="scene clip" data-start="5.5" data-duration="7.5" data-track-index="0">
-        <div class="desk"></div>
-        <div class="macwin" id="macwin">
-          <div class="macbar"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></div>
-          <div class="macbody">
-            <div class="h" style="width:520px"></div>
-            <div class="p" style="width:900px"></div>
-            <div class="p" style="width:860px"></div>
-            <div class="p" style="width:920px"></div>
-            <div class="p" style="width:640px"></div>
-            <div class="h" style="width:360px;margin-top:36px"></div>
-            <div class="p" style="width:880px"></div>
-            <div class="p" style="width:820px"></div>
-            <div class="p" style="width:700px"></div>
+      <!-- S2 -->
+      <div id="s2" class="scene clip" data-start="5.5" data-duration="8.5" data-track-index="0">
+        <div style="position:absolute;inset:0;background:radial-gradient(1200px 700px at 50% 20%,#141926 0%,#07080b 72%)"></div>
+        <div class="macwin" id="macwin" data-layout-ignore>
+          <div class="macbar">
+            <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+            <div class="urlbar">app.ledgerhq.com/invoices</div>
+          </div>
+          <div class="app">
+            <aside class="side">
+              <div class="brand">Ledger</div>
+              <div class="navi on"><i></i>Invoices</div>
+              <div class="navi"><i></i>Customers</div>
+              <div class="navi"><i></i>Reports</div>
+              <div class="navi"><i></i>Settings</div>
+            </aside>
+            <main class="main2">
+              <div class="mhead"><h3>Invoices</h3><div class="btnp">New invoice</div></div>
+              <div class="stats">
+                <div class="stat"><div class="k">Outstanding</div><div class="v">$12,480</div></div>
+                <div class="stat"><div class="k">Paid this month</div><div class="v">$38,200</div></div>
+                <div class="stat"><div class="k">Overdue</div><div class="v">4</div></div>
+              </div>
+              <div class="tbl">
+                <div class="tr hd"><div class="c1">Customer</div><div class="c2">Issued</div><div class="c3">Status</div><div class="c4">Amount</div></div>
+                <div class="tr"><div class="c1">Northwind Supply</div><div class="c2">Oct 2</div><div class="c3"><span class="pill2 paid">Paid</span></div><div class="c4">$4,200.00</div></div>
+                <div class="tr"><div class="c1">Ridgeway Studio</div><div class="c2">Oct 6</div><div class="c3"><span class="pill2 due">Due</span></div><div class="c4">$1,850.00</div></div>
+                <div class="tr"><div class="c1">Halcyon Labs</div><div class="c2">Sep 28</div><div class="c3"><span class="pill2 over">Overdue</span></div><div class="c4">$920.00</div></div>
+                <div class="tr"><div class="c1">Marrow &amp; Co</div><div class="c2">Oct 9</div><div class="c3"><span class="pill2 paid">Paid</span></div><div class="c4">$7,300.00</div></div>
+              </div>
+            </main>
           </div>
         </div>
-        <div id="marquee" style="left:640px;top:330px;width:640px;height:300px"></div>
+
+        <div id="marquee" style="left:560px;top:300px;width:760px;height:390px"></div>
         <div id="flash"></div>
-        <div class="card" id="flycard" style="left:64px;top:474px;width:276px;height:202px;opacity:0">
-          <div class="shot"><i style="width:150px"></i><i style="width:230px"></i><i style="width:180px"></i><i style="width:120px"></i></div>
+
+        <div class="card" id="flycard" style="left:64px;top:470px;opacity:0">
+          <div class="shot">
+            <div class="ct">Invoices</div>
+            <div class="r m"></div><div class="r s"></div><div class="r m"></div><div class="r s"></div>
+          </div>
           <div class="meta" data-layout-ignore>Screenshot 2</div>
         </div>
-        <div class="caption" id="s2cap">Press <b>&#8984;&#8679;4</b> &nbsp;&middot;&nbsp; and it's already captured</div>
-        <div id="keys" style="position:absolute;left:0;right:0;top:150px;text-align:center;opacity:0">
+
+        <div class="caption" id="s2cap">Press <b>&#8984;&#8679;4</b> &nbsp;&middot;&nbsp; capture anything on screen</div>
+        <div id="keys" style="position:absolute;left:0;right:0;top:120px;text-align:center;opacity:0">
           <span class="kbd">&#8984;</span><span class="kbd">&#8679;</span><span class="kbd">4</span>
         </div>
       </div>
 
-      <!-- ================= SCENE 3 : side stack ================= -->
-      <div id="s3" class="scene clip" data-start="13" data-duration="7.5" data-track-index="0">
+      <!-- S3 -->
+      <div id="s3" class="scene clip" data-start="14" data-duration="6.5" data-track-index="0">
         <div class="glow" style="width:700px;height:700px;left:-180px;top:190px;opacity:.30"></div>
 
-        <div class="card" id="c1" style="left:64px;top:250px">
-          <div class="shot"><i style="width:120px"></i><i style="width:200px"></i><i style="width:160px"></i></div>
+        <div class="card" id="c1" style="left:64px;top:226px">
+          <div class="shot"><div class="ct">Invoices</div><div class="r m"></div><div class="r s"></div><div class="r m"></div></div>
           <div class="meta" data-layout-ignore>Screenshot 3</div>
         </div>
-
-        <div class="card" id="c2" style="left:64px;top:474px">
-          <div class="shot"><i style="width:180px"></i><i style="width:140px"></i><i style="width:210px"></i><i style="width:110px"></i></div>
+        <div class="card" id="c2" style="left:64px;top:470px">
+          <div class="shot"><div class="ct">Invoices</div><div class="r m"></div><div class="r s"></div><div class="r m"></div><div class="r s"></div></div>
           <div class="meta" data-layout-ignore>Screenshot 2</div>
           <div class="acts" id="acts" data-layout-ignore><span class="pill copy">Copy</span><span class="pill save">Save</span></div>
           <div class="check" id="check">&#10003;</div>
         </div>
-
-        <div class="card" id="c3" style="left:64px;top:698px">
-          <div class="shot"><i style="width:150px"></i><i style="width:190px"></i></div>
+        <div class="card" id="c3" style="left:64px;top:714px">
+          <div class="shot"><div class="ct">Invoices</div><div class="r m"></div><div class="r s"></div></div>
           <div class="meta" data-layout-ignore>Screenshot 1</div>
         </div>
 
         <div class="caption" id="s3cap">It doesn't vanish. <b>It waits on the side.</b></div>
       </div>
 
-      <!-- ================= SCENE 4 : annotate ================= -->
-      <div id="s4" class="scene clip" data-start="20.5" data-duration="8" data-track-index="0">
-        <div class="glow" style="width:800px;height:800px;left:560px;top:140px;opacity:.22"></div>
-
+      <!-- S4 -->
+      <div id="s4" class="scene clip" data-start="20.5" data-duration="11.5" data-track-index="0">
+        <div class="glow" style="width:800px;height:800px;left:560px;top:140px;opacity:.20"></div>
         <div class="editor" id="editor">
           <div class="ebar">
+            <div id="toolring"></div>
             <div class="tool"><svg viewBox="0 0 24 24"><path d="M5 3l6 16 2.5-6.5L20 10z"/></svg></div>
             <div class="sep"></div>
             <div class="tool"><svg viewBox="0 0 24 24"><path d="M3 21L21 3M21 3h-7M21 3v7"/></svg></div>
@@ -223,7 +241,7 @@
             <div class="tool"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></div>
             <div class="tool"><svg viewBox="0 0 24 24"><path d="M4 18l4-7 3 4 3-6 3 9z"/></svg></div>
             <div class="tool"><svg viewBox="0 0 24 24"><path d="M5 19l3-1 10-10-2-2L6 16z"/></svg></div>
-            <div class="tool on"><svg viewBox="0 0 24 24"><path d="M4 6h16M12 6v13"/></svg></div>
+            <div class="tool"><svg viewBox="0 0 24 24"><path d="M4 6h16M12 6v13"/></svg></div>
             <div class="tool"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="3"/><path d="M9 21l3-4"/></svg></div>
             <div class="sep"></div>
             <div style="flex:1"></div>
@@ -232,46 +250,38 @@
           </div>
 
           <div class="ecanvas">
-            <div class="txt">
-              <div class="l dark" style="width:420px"></div>
-              <div class="l" style="width:640px"></div>
-              <div class="l" style="width:600px"></div>
-              <div class="l" style="width:520px"></div>
-              <div class="l dark" style="width:300px;margin-top:28px"></div>
-              <div class="l" style="width:620px"></div>
-              <div class="l" style="width:580px"></div>
-            </div>
-            <div class="panel">
-              <div class="b" style="width:120px"></div>
-              <div class="big"></div>
-              <div class="b" style="width:300px"></div>
-              <div class="b" style="width:250px"></div>
+            <div class="shot2" data-layout-ignore>
+              <div class="top"><div class="t">Invoices</div><div class="btnp">New invoice</div></div>
+              <div class="body2">
+                <div class="row2"><div class="n">Northwind Supply</div><div class="d2">Oct 2</div><div class="s"><span class="pill2 paid">Paid</span></div><div class="a">$4,200.00</div></div>
+                <div class="row2"><div class="n">Ridgeway Studio</div><div class="d2">Oct 6</div><div class="s"><span class="pill2 due">Due</span></div><div class="a">$1,850.00</div></div>
+                <div class="row2"><div class="n">Halcyon Labs</div><div class="d2">Sep 28</div><div class="s"><span class="pill2 over">Overdue</span></div><div class="a">$920.00</div></div>
+                <div class="row2"><div class="n">Marrow &amp; Co</div><div class="d2">Oct 9</div><div class="s"><span class="pill2 paid">Paid</span></div><div class="a">$7,300.00</div></div>
+              </div>
             </div>
 
-            <svg id="ink" width="1420" height="738" viewBox="0 0 1420 738"
-                 style="position:absolute;left:0;top:0">
-              <path id="arrow" d="M600 330 L909 221" stroke="#e33b3b" stroke-width="7"
-                    stroke-linecap="round" fill="none"/>
-              <path id="arrowhead" d="M912 231 L935 212 L905 212" stroke="#e33b3b"
-                    stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <svg id="ink" width="1460" height="746" viewBox="0 0 1460 746" style="position:absolute;left:0;top:0">
+              <rect id="hl" x="70" y="170" width="1320" height="58" rx="7" fill="#ffd54a" opacity="0"/>
+              <path id="arrow" d="M420 470 L1074 272" stroke="#e33b3b" stroke-width="7" stroke-linecap="round" fill="none"/>
+              <path id="arrowhead" d="M1075 282 L1100 263 L1068 261" stroke="#e33b3b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <g id="blurG" opacity="0">
+                <rect x="1246" y="302" width="162" height="52" rx="6" fill="#b9c4d6"/>
+                <rect x="1262" y="322" width="118" height="12" rx="6" fill="#a3b0c6"/>
+              </g>
               <g id="calloutG">
-                <path id="leader" d="M250 452 L299 221" stroke="#366ae1" stroke-width="5"
-                      fill="none" stroke-linecap="round"/>
-                <path id="leadhead" d="M308 223 L305 196 L291 220" stroke="#366ae1"
-                      stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                <rect id="cbox" x="120" y="452" width="250" height="52" rx="8" fill="#366ae1"/>
-                <text id="ctext" x="142" y="487" font-size="24" font-weight="600"
-                      fill="#ffffff" font-family="-apple-system,Helvetica Neue,Arial">fix this spacing</text>
+                <path id="leader" d="M430 618 L336 225" stroke="#366ae1" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path id="leadhead" d="M345 223 L330 200 L327 227" stroke="#366ae1" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <rect id="cbox" x="150" y="590" width="280" height="56" rx="9" fill="#366ae1"/>
+                <text id="ctext" x="174" y="627" font-size="25" font-weight="600" fill="#fff" font-family="-apple-system,Helvetica Neue,Arial">chase this one</text>
               </g>
             </svg>
           </div>
         </div>
-
-        <div class="caption" id="s4cap" style="bottom:58px">Annotate <b>without opening another app</b></div>
+        <div class="caption" id="s4cap" style="bottom:20px">Highlight, arrow, blur, callout &mdash; <b>built in</b></div>
       </div>
 
-      <!-- ================= SCENE 5 : end ================= -->
-      <div id="s5" class="scene clip" data-start="28.5" data-duration="5.5" data-track-index="0">
+      <!-- S5 -->
+      <div id="s5" class="scene clip" data-start="32" data-duration="6" data-track-index="0">
         <div class="glow" style="width:1000px;height:1000px;left:460px;top:40px;opacity:.42"></div>
         <div class="end">
           <img id="logo2" src="assets/logo.png" alt="Sideshot" />
@@ -288,72 +298,91 @@
       const tl = gsap.timeline({ paused: true });
 
       gsap.set("#marquee", { scaleX: 0, scaleY: 0, opacity: 0 });
-      gsap.set(["#arrow", "#arrowhead", "#leader", "#leadhead"], { strokeDasharray: 600, strokeDashoffset: 600 });
-      gsap.set("#cbox, #ctext", { opacity: 0 });
+      gsap.set(["#arrow", "#arrowhead", "#leader", "#leadhead"], { strokeDasharray: 900, strokeDashoffset: 900 });
+      gsap.set(["#cbox", "#ctext"], { opacity: 0 });
+      gsap.set("#hl", { opacity: 0 });
+      gsap.set("#blurG", { opacity: 0 });
+      gsap.set("#logo", { opacity: 0.85, scale: 0.97, filter: "blur(3px)" });
       gsap.set("#word", { opacity: 0.9, y: 12 });
       gsap.set("#tag", { opacity: 0.72, y: 10 });
-      gsap.set("#logo", { opacity: 0.85, scale: 0.97, filter: "blur(3px)" });
       gsap.set(["#s2cap", "#s3cap", "#s4cap"], { opacity: 0, y: 18 });
       gsap.set("#macwin", { opacity: 0, y: 26, scale: 0.985 });
 
-      /* ---- SCENE 1 : 0 -> 5.5 ---- */
+      /* S1 */
       tl.fromTo("#s1glow", { opacity: 0, scale: 0.7 }, { opacity: 0.55, scale: 1, duration: 1.6, ease: "power3.out" }, 0);
       tl.to("#logo", { opacity: 1, scale: 1, filter: "blur(0px)", duration: 1.05, ease: "power4.out" }, 0.15);
       tl.to("#word", { opacity: 1, y: 0, duration: 0.85, ease: "power3.out" }, 1.05);
       tl.to("#tag", { opacity: 1, y: 0, duration: 0.75, ease: "power3.out" }, 1.45);
       tl.to("#s1 .stack", { y: -34, scale: 1.03, duration: 1.6, ease: "power2.inOut" }, 3.6);
-      tl.to("#s1", { opacity: 0, duration: 0.55, ease: "power2.in" }, 4.85);
+      tl.to("#s1", { opacity: 0, duration: 0.55, ease: "power2.in" }, 4.9);
 
-      /* ---- SCENE 2 : 5.5 -> 13 ---- */
-      tl.to("#macwin", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, 5.6);
-      tl.to("#keys", { opacity: 1, duration: 0.3 }, 6.1);
+      /* S2 */
+      tl.to("#macwin", { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, 5.7);
+      tl.to("#keys", { opacity: 1, duration: 0.3 }, 6.2);
       tl.fromTo("#keys .kbd", { y: 26, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.42, stagger: 0.09, ease: "back.out(2.2)" }, 6.15);
-      tl.to("#keys", { opacity: 0, duration: 0.3 }, 7.5);
-      tl.to("#s2cap", { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.3);
+        { y: 0, opacity: 1, duration: 0.42, stagger: 0.09, ease: "back.out(2.2)" }, 6.25);
+      tl.to("#keys", { opacity: 0, duration: 0.3 }, 7.7);
+      tl.to("#s2cap", { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.4);
 
       tl.fromTo("#marquee", { scaleX: 0, scaleY: 0, opacity: 0 },
-        { scaleX: 1, scaleY: 1, opacity: 1, duration: 0.85, ease: "power2.inOut" }, 7.6);
-      tl.to("#flash", { opacity: 0.72, duration: 0.1, ease: "power1.in" }, 8.55);
-      tl.to("#flash", { opacity: 0, duration: 0.42, ease: "power2.out" }, 8.65);
-      tl.to("#marquee", { opacity: 0, duration: 0.3 }, 8.6);
-      tl.fromTo("#flycard", { opacity: 0, x: 778, y: -63, scale: 1.304 },
-        { opacity: 1, x: 778, y: -63, scale: 1.304, duration: 0.28, ease: "power2.out" }, 8.85);
-      tl.to("#flycard", { x: 0, y: 0, scale: 1, duration: 0.95, ease: "power3.inOut" }, 9.3);
-      tl.to("#s2cap", { opacity: 0, y: -12, duration: 0.4 }, 12.1);
-      tl.to("#macwin", { opacity: 0, scale: 0.97, duration: 0.6, ease: "power2.in" }, 12.2);
+        { scaleX: 1, scaleY: 1, opacity: 1, duration: 0.9, ease: "power2.inOut" }, 7.9);
+      tl.to("#flash", { opacity: 0.75, duration: 0.1, ease: "power1.in" }, 8.95);
+      tl.to("#flash", { opacity: 0, duration: 0.42, ease: "power2.out" }, 9.05);
+      tl.to("#marquee", { opacity: 0, duration: 0.3 }, 9.0);
+      tl.fromTo("#flycard", { opacity: 0, x: 800, y: -60, scale: 1.34 },
+        { opacity: 1, x: 800, y: -60, scale: 1.34, duration: 0.28, ease: "power2.out" }, 9.25);
+      tl.to("#flycard", { x: 0, y: 0, scale: 1, duration: 0.95, ease: "power3.inOut" }, 9.7);
+      tl.to("#s2cap", { opacity: 0, y: -12, duration: 0.4 }, 12.9);
+      tl.to("#macwin", { opacity: 0, scale: 0.97, duration: 0.6, ease: "power2.in" }, 13.0);
 
-      /* ---- SCENE 3 : 13 -> 20.5 ---- */
+      /* S3 */
       tl.fromTo(["#c1", "#c2", "#c3"], { x: -80, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.7, stagger: 0.12, ease: "power3.out" }, 13.3);
-      tl.to("#s3cap", { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, 14.1);
-      tl.to("#acts", { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 15.7);
-      tl.to("#c2", { scale: 1.03, duration: 0.3, ease: "power2.out" }, 15.7);
-      tl.to("#acts", { opacity: 0, duration: 0.18 }, 16.9);
-      tl.to("#check", { opacity: 1, duration: 0.2 }, 17.0);
-      tl.to("#c2", { x: -420, opacity: 0, duration: 0.62, ease: "power3.in" }, 17.8);
-      tl.to("#s3cap", { opacity: 0, y: -12, duration: 0.4 }, 19.8);
+        { x: 0, opacity: 1, duration: 0.7, stagger: 0.12, ease: "power3.out" }, 14.3);
+      tl.to("#s3cap", { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, 15.0);
+      tl.to("#acts", { opacity: 1, duration: 0.35, ease: "power2.out" }, 16.3);
+      tl.to("#c2", { scale: 1.03, duration: 0.3, ease: "power2.out" }, 16.3);
+      tl.to("#acts", { opacity: 0, duration: 0.18 }, 17.5);
+      tl.to("#check", { opacity: 1, duration: 0.2 }, 17.6);
+      tl.to("#c2", { x: -440, opacity: 0, duration: 0.62, ease: "power3.in" }, 18.3);
+      tl.to("#s3cap", { opacity: 0, y: -12, duration: 0.4 }, 19.9);
 
-      /* ---- SCENE 4 : 20.5 -> 28.5 ---- */
+      /* S4 */
       tl.fromTo("#editor", { opacity: 0, y: 34, scale: 0.975 },
         { opacity: 1, y: 0, scale: 1, duration: 0.85, ease: "power3.out" }, 20.7);
-      tl.to("#s4cap", { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 21.2);
-      tl.fromTo("#arrow", { strokeDashoffset: 600 }, { strokeDashoffset: 0, duration: 0.55, ease: "power2.inOut" }, 22.4);
-      tl.fromTo("#arrowhead", { strokeDashoffset: 600 }, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 22.9);
-      tl.to("#cbox", { opacity: 1, duration: 0.25 }, 23.5);
-      tl.to("#ctext", { opacity: 1, duration: 0.25 }, 23.6);
-      tl.fromTo("#leader", { strokeDashoffset: 600 }, { strokeDashoffset: 0, duration: 0.45, ease: "power2.inOut" }, 23.9);
-      tl.fromTo("#leadhead", { strokeDashoffset: 600 }, { strokeDashoffset: 0, duration: 0.25, ease: "power2.out" }, 24.3);
-      tl.to("#s4cap", { opacity: 0, y: -12, duration: 0.4 }, 27.6);
-      tl.to("#editor", { opacity: 0, y: -24, scale: 0.98, duration: 0.6, ease: "power2.in" }, 27.9);
+      tl.to("#s4cap", { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 21.3);
 
-      /* ---- SCENE 5 : 28.5 -> 34 ---- */
+      // highlighter (6th icon)
+      tl.to("#toolring", { opacity: 1, duration: 0.2 }, 21.8);
+      tl.to("#toolring", { x: 262, duration: 0.35, ease: "power3.inOut" }, 21.9);
+      tl.to("#hl", { opacity: 0.42, duration: 0.45, ease: "power2.out" }, 22.35);
+      tl.to("#hl", { opacity: 0, duration: 0.5, ease: "power2.in" }, 25.7);
+
+      // arrow (2nd icon)
+      tl.to("#toolring", { x: 66, duration: 0.35, ease: "power3.inOut" }, 23.5);
+      tl.fromTo("#arrow", { strokeDashoffset: 900 }, { strokeDashoffset: 0, duration: 0.6, ease: "power2.inOut" }, 23.9);
+      tl.fromTo("#arrowhead", { strokeDashoffset: 900 }, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 24.45);
+
+      // ellipse (5th icon) then blur used on the amount
+      tl.to("#toolring", { x: 213, duration: 0.3, ease: "power3.inOut" }, 25.2);
+      tl.to("#toolring", { x: 409, duration: 0.35, ease: "power3.inOut" }, 26.6);
+      tl.to("#blurG", { opacity: 1, duration: 0.35, ease: "power2.out" }, 25.9);
+
+      // callout (9th icon)
+      tl.to("#cbox", { opacity: 1, duration: 0.25 }, 27.2);
+      tl.to("#ctext", { opacity: 1, duration: 0.25 }, 27.3);
+      tl.fromTo("#leader", { strokeDashoffset: 900 }, { strokeDashoffset: 0, duration: 0.5, ease: "power2.inOut" }, 27.5);
+      tl.fromTo("#leadhead", { strokeDashoffset: 900 }, { strokeDashoffset: 0, duration: 0.25, ease: "power2.out" }, 27.95);
+
+      tl.to("#s4cap", { opacity: 0, y: -12, duration: 0.4 }, 31.2);
+      tl.to("#editor", { opacity: 0, y: -24, scale: 0.98, duration: 0.6, ease: "power2.in" }, 31.5);
+
+      /* S5 */
       tl.fromTo("#logo2", { opacity: 0, scale: 0.86, filter: "blur(10px)" },
-        { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "power4.out" }, 28.7);
-      tl.fromTo("#endtitle", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 29.2);
-      tl.fromTo("#endsub", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 29.55);
-      tl.fromTo("#endurl", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 29.95);
-      tl.to("#s5 .end", { scale: 1.015, duration: 3.4, ease: "none" }, 30.4);
+        { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "power4.out" }, 32.2);
+      tl.fromTo("#endtitle", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 32.7);
+      tl.fromTo("#endsub", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 33.05);
+      tl.fromTo("#endurl", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 33.45);
+      tl.to("#s5 .end", { scale: 1.015, duration: 3.6, ease: "none" }, 34.0);
 
       window.__timelines["main"] = tl;
       tl.seek(0);
