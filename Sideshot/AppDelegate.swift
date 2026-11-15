@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private var recordingBorderTimer: Timer?
     private var recordingWindowID: CGWindowID?
     private var lastCaptureError: String?
+    private var recordingRect: NSRect?
     private var needsScreenPermission = false
     private var windowSelectionWindow: NSWindow?
 
@@ -639,13 +640,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         guard rect.width > 4, rect.height > 4 else { return }
         let border = RecordingBorderWindow(rect: rect)
         recordingBorder = border
+        recordingRect = rect
         border.orderFrontRegardless()
+        // If the pill already exists, snap it onto the new border.
+        recordIndicator?.attach(to: rect)
     }
 
     private func hideRecordingBorder() {
         recordingBorderTimer?.invalidate()
         recordingBorderTimer = nil
         recordingWindowID = nil
+        recordingRect = nil
         recordingBorder?.orderOut(nil)
         recordingBorder?.close()
         recordingBorder = nil
@@ -663,7 +668,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                   let w = boundsDict["Width"], let h = boundsDict["Height"],
                   w > 4, h > 4
             else { return }
-            self.recordingBorder?.move(to: appKitRect(fromCaptureRect: CGRect(x: x, y: y, width: w, height: h)))
+            let moved = appKitRect(fromCaptureRect: CGRect(x: x, y: y, width: w, height: h))
+            self.recordingBorder?.move(to: moved)
+            self.recordingRect = moved
+            self.recordIndicator?.attach(to: moved)
         }
     }
 
@@ -673,6 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         ind.onStop = { [weak self] in self?.stopRecording() }
         recordIndicator = ind
         ind.show()
+        if let r = recordingRect { ind.attach(to: r) }
         // Red dot in the menu bar too, so there's always a sign it's recording even
         // if the floating pill is hidden behind a full-screen window.
         statusItem.button?.image = NSImage(systemSymbolName: "record.circle.fill",

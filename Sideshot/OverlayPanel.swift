@@ -429,7 +429,8 @@ final class RecordIndicator: NSPanel {
 
     /// Fixed size: `NSHostingView.fittingSize` on a freshly built view reports zero,
     /// which produced a zero-sized (invisible) panel.
-    private static let size = NSSize(width: 320, height: 56)
+    /// Sized to read as a notch cut into the recording border rather than a floating pill.
+    private static let size = NSSize(width: 244, height: 32)
 
     init(source: String = "Screen") {
         self.source = source
@@ -449,17 +450,54 @@ final class RecordIndicator: NSPanel {
         hosting.frame = NSRect(origin: .zero, size: Self.size)
         contentView = hosting
 
-        // Top-centre: the eye already goes to the top of the screen, and it can't be
-        // confused with the menu-bar clock on the right.
-        let screen = NSScreen.main ?? NSScreen.screens.first!
-        setFrame(NSRect(x: screen.frame.midX - Self.size.width / 2,
-                        y: screen.frame.maxY - Self.size.height - 14,
-                        width: Self.size.width, height: Self.size.height),
-                 display: false)
+        setFrame(NSRect(origin: .zero, size: Self.size), display: false)
     }
 
     func show() {
         orderFrontRegardless()
+    }
+
+    /// Sit on the recording border like a notch, and stay on screen no matter where the
+    /// recorded window/area is. Straddles the top edge when there is room above it;
+    /// otherwise tucks just inside the border. Horizontally clamped to the visible screen.
+    func attach(to rect: NSRect) {
+        guard rect.width > 2, rect.height > 2 else { return }
+        let w = Self.size.width
+        let h = Self.size.height
+        let screen = Self.screen(containing: rect)
+        // visibleFrame, not frame: the menu bar and Dock draw over our window level,
+        // so anything placed in that strip gets clipped.
+        let vis = screen.visibleFrame
+
+        var y: CGFloat
+        if rect.maxY + h / 2 + 6 <= vis.maxY {
+            y = rect.maxY - h / 2               // straddling the border line
+        } else if rect.maxY - h - 2 >= vis.minY {
+            y = rect.maxY - h - 2               // no room above: hang inside the border
+        } else {
+            y = rect.maxY - h / 2
+        }
+        // Never let it slide under the menu bar or below the Dock.
+        y = min(y, vis.maxY - h - 2)
+        y = max(y, vis.minY + 2)
+
+        var x = rect.midX - w / 2
+        x = max(vis.minX + 8, min(x, vis.maxX - w - 8))
+
+        let frame = NSRect(x: x, y: y, width: w, height: h)
+        setFrame(frame, display: true)
+        let inside = vis.contains(frame)
+        sideLog.debug("notch rect=\(Int(rect.minX), privacy: .public),\(Int(rect.minY), privacy: .public),\(Int(rect.width), privacy: .public)x\(Int(rect.height), privacy: .public) bar=\(Int(frame.minX), privacy: .public),\(Int(frame.minY), privacy: .public) insideVisible=\(inside, privacy: .public)")
+    }
+
+    /// The screen holding most of `rect` — not necessarily the main screen.
+    private static func screen(containing rect: NSRect) -> NSScreen {
+        func overlap(_ s: NSScreen) -> CGFloat {
+            let i = s.frame.intersection(rect)
+            return i.isNull ? 0 : i.width * i.height
+        }
+        return NSScreen.screens.max(by: { overlap($0) < overlap($1) })
+            ?? NSScreen.main ?? NSScreen.screens.first!
     }
 }
 
@@ -467,30 +505,51 @@ struct RecordIndicatorView: View {
     let source: String
     let onStop: () -> Void
     @State private var seconds = 0
+    @State private var pulse = false
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Button(action: onStop) {
-            HStack(spacing: 6) {
-                Circle().fill(Color.red).frame(width: 11, height: 11)
-                Text("REC \(timeString)")
-                    .font(.system(size: 15, weight: .bold))
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 9, height: 9)
+                    .opacity(pulse ? 0.3 : 1)
+                Text(timeString)
+                    .font(.system(size: 13, weight: .bold))
                     .monospacedDigit()
+                    .foregroundColor(.primary)
                 Text(source)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
-                Text("click to stop")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                HStack(spacing: 5) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Stop")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 9).padding(.vertical, 5)
+                .background(Capsule().fill(Color.red))
             }
-            .padding(.horizontal, 18).padding(.vertical, 10)
-            .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().stroke(Color.red.opacity(0.45), lineWidth: 1.5))
-            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+            .padding(.leading, 12).padding(.trailing, 6)
+            .frame(width: 244, height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(Color.red.opacity(0.6), lineWidth: 1.5)
+            )
         }
-        .buttonStyle(PressableStyle())
-        .onReceive(timer) { _ in seconds += 1 }
-        .padding(6)
+        .buttonStyle(.plain)
+        .onReceive(timer) { _ in
+            seconds += 1
+            withAnimation(.easeInOut(duration: 0.55)) { pulse.toggle() }
+        }
     }
 
     private var timeString: String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }
