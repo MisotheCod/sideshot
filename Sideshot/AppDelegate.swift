@@ -716,7 +716,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
 
     private func notifyError(_ error: Error) {
         NSSound.beep()
-        NSLog("Sideshot error: \(error.localizedDescription)")
+        sideLog.error("capture failed: \(error.localizedDescription, privacy: .public)")
         lastCaptureError = error.localizedDescription
 
         // Automated diagnostics must not block on a modal alert.

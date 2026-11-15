@@ -41,7 +41,7 @@ final class ScrollCapture {
     private let maxFrames = 120
     /// In device pixels. A Retina display doubles the point height, so the old 30k
     /// cap tripped on pages only ~15k points tall.
-    private let maxHeight = 40_000
+    private let maxHeight = 60_000
     /// Memory guard: the stitcher holds the whole image as RGBA.
     private let maxPixels = 200_000_000
 
@@ -217,6 +217,11 @@ final class ScrollCapture {
         stitcher.append(previous, advance: firstOffset)
         progress(stitcher.height)
 
+        // At the bottom of a page the view rubber-bands, so frames keep differing by a
+        // few pixels. Without this, the loop treats the bounce as fresh content and
+        // keeps appending until it hits the size cap and fails.
+        var weakSteps = 0
+
         for _ in 0..<maxFrames {
             postScroll(direction: -1, pixels: requested, in: window)
             try? await Task.sleep(nanoseconds: 240_000_000)
@@ -225,6 +230,13 @@ final class ScrollCapture {
 
             guard let offset = Self.matchOffset(previous: previous, next: after, expected: requested),
                   offset > 4, offset < previous.height - 4 else { break }
+
+            if offset < requested / 3 {
+                weakSteps += 1
+                if weakSteps >= 2 { break }
+            } else {
+                weakSteps = 0
+            }
 
             stitcher.append(after, advance: offset)
             previous = after
