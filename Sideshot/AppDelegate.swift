@@ -4,7 +4,7 @@ import ScreenCaptureKit
 import Sparkle
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let thumbnails = ThumbnailManager()
@@ -112,9 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         refreshMenu()
     }
 
+    /// Rebuild the menu every time it opens: version and permission state change at
+    /// runtime, and a menu built once at launch shows stale (wrong) information.
     private func refreshMenu() {
-        guard statusItem != nil else { return }
-        statusItem.menu = buildMenu()
+        // Intentionally empty — the menu is constructed on open.
     }
 
     private func setupStatusItem() {
@@ -122,7 +123,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         if let b = statusItem.button {
             b.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Sideshot")
         }
-        statusItem.menu = buildMenu()
+        let menu = NSMenu()
+        menu.delegate = self
+        statusItem.menu = menu
+        // Seed it: an empty menu can fail to open before the delegate is consulted.
+        menuNeedsUpdate(menu)
+    }
+
+    /// Rebuild the item list every time the menu opens, so the version and the
+    /// Screen Recording state are never stale.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let fresh = buildMenu()
+        let items = fresh.items
+        for i in items { fresh.removeItem(i) }
+        for i in items { menu.addItem(i) }
     }
 
     private func buildMenu() -> NSMenu {
@@ -135,6 +150,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
             it.target = self
             return it
         }
+
+        // Always show the running version and whether capture will actually work —
+        // otherwise there is no way to tell which build is installed.
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let header = NSMenuItem(title: "Sideshot \(version) (\(build))", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+
+        let perm = NSMenuItem(title: needsScreenPermission
+                              ? "Screen Recording: NOT granted"
+                              : "Screen Recording: granted",
+                              action: nil, keyEquivalent: "")
+        perm.isEnabled = false
+        menu.addItem(perm)
+        menu.addItem(.separator())
 
         if let v = gentleUpdateVersion {
             menu.addItem(item("Sideshot \(v) is available…", #selector(checkForUpdates)))

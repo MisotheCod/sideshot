@@ -88,11 +88,15 @@ struct CapturePickerView: View {
                     }
                 }
 
-                Text(recording
-                     ? "Recording starts right away — the REC pill stops it"
-                     : "Captured straight into the side stack")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 6) {
+                    Text(recording
+                         ? "Recording starts right away — the REC pill stops it"
+                         : "Captured straight into the side stack")
+                    Text("· v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
             .padding(16)
             .background(
