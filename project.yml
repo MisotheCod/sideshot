@@ -45,8 +45,8 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "© 2026 Cam"
-        CFBundleShortVersionString: "0.1.21"
-        CFBundleVersion: "21"
+        CFBundleShortVersionString: "0.1.22"
+        CFBundleVersion: "22"
         SUFeedURL: "https://github.com/MisotheCod/sideshot/releases/latest/download/appcast.xml"
         SUPublicEDKey: "dkk/tUXiZES0c6Zn1MavgX8mUjkITrfw2Ig3jeLvTXI="
         SUEnableAutomaticChecks: true

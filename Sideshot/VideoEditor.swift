@@ -29,6 +29,14 @@ final class PlayerController: ObservableObject {
     let player: AVPlayer
     @Published var currentTime: Double = 0
     @Published var isPlaying: Bool = false
+
+    /// When set, playback is confined to this span and loops inside it, so Play
+    /// previews exactly the trimmed clip rather than the whole recording.
+    var playRange: ClosedRange<Double>? {
+        didSet { applyEndTime() }
+    }
+
+    private var looping = false
     private var observer: Any?
 
     init(url: URL) {
@@ -36,8 +44,31 @@ final class PlayerController: ObservableObject {
         let interval = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
         observer = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] t in
             guard let self else { return }
-            self.currentTime = t.seconds
-            self.isPlaying = self.player.timeControlStatus == .playing
+            let seconds = t.seconds
+            self.currentTime = seconds
+            let playing = self.player.timeControlStatus == .playing
+            // Treat the loop seam as still-playing, otherwise the big play glyph
+            // flashes for one frame every time the selection restarts.
+            self.isPlaying = playing || self.looping
+
+            // Loop the selection. forwardPlaybackEndTime halts exactly at the out
+            // point, so also catch the stopped-at-the-end case.
+            guard let r = self.playRange, self.looping, seconds.isFinite else { return }
+            if seconds >= r.upperBound - 0.02 || (!playing && seconds >= r.upperBound - 0.2) {
+                self.player.seek(to: CMTime(seconds: r.lowerBound, preferredTimescale: 600),
+                                 toleranceBefore: .zero, toleranceAfter: .zero)
+                self.player.play()
+            }
+        }
+    }
+
+    /// Stop the item exactly at the out point rather than overshooting it.
+    private func applyEndTime() {
+        if let r = playRange {
+            player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: r.upperBound,
+                                                               preferredTimescale: 600)
+        } else {
+            player.currentItem?.forwardPlaybackEndTime = .invalid
         }
     }
 
@@ -48,7 +79,30 @@ final class PlayerController: ObservableObject {
     }
 
     func togglePlay() {
-        if player.rate > 0 { player.pause() } else { player.play() }
+        if player.rate > 0 {
+            pause()
+            return
+        }
+        if let r = playRange {
+            // Pressing Play outside the selection should jump to its start, not play
+            // footage the user has already trimmed away.
+            if currentTime < r.lowerBound + 0.02 || currentTime >= r.upperBound - 0.05 {
+                seek(to: r.lowerBound)
+            }
+            looping = true
+        }
+        player.play()
+    }
+
+    func pause() {
+        player.pause()
+        looping = false
+        isPlaying = false
+    }
+
+    func resume() {
+        looping = playRange != nil
+        player.play()
     }
 
     deinit {
@@ -154,6 +208,8 @@ struct VideoEditorView: View {
         }
         .padding(20)
         .onAppear { load() }
+        .onChange(of: trimStart) { _, _ in syncPlayRange() }
+        .onChange(of: trimEnd) { _, _ in syncPlayRange() }
     }
 
     // MARK: - Loading
@@ -170,6 +226,7 @@ struct VideoEditorView: View {
                     trimStart = 0
                     trimEnd = dur
                     stripImage = Self.compositeStrip(frames: frames)
+                    syncPlayRange()
                 }
             } catch {
                 await MainActor.run { duration = 0 }
@@ -224,7 +281,7 @@ struct VideoEditorView: View {
 
     private func scrubBegan() {
         wasPlaying = controller.isPlaying
-        controller.player.pause()
+        controller.pause()
     }
 
     private func scrub(to t: Double) {
@@ -232,7 +289,18 @@ struct VideoEditorView: View {
     }
 
     private func scrubEnded() {
-        if wasPlaying { controller.player.play() }
+        if wasPlaying { controller.resume() }
+    }
+
+    /// Keep the player's confinement in sync with the handles as they move.
+    private func syncPlayRange() {
+        guard duration > 0 else { controller.playRange = nil; return }
+        let s = max(0, min(trimStart, trimEnd - 0.1))
+        let e = min(duration, max(trimEnd, s + 0.1))
+        // Only confine playback once the user has actually trimmed something;
+        // an untouched clip should still play straight through once.
+        let trimmed = s > 0.05 || e < duration - 0.05
+        controller.playRange = trimmed ? (s...e) : nil
     }
 
     // MARK: - Export
