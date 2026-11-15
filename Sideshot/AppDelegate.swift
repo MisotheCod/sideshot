@@ -480,6 +480,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                         guard let self else { return }
                         self.windowSelectionWindow?.orderOut(nil)
                         self.windowSelectionWindow = nil
+                        let app = w.owningApplication?.applicationName ?? "window"
+                        let toast = forScroll ? "Scrolling " + app
+                                   : forRecording ? "Recording " + app
+                                   : "Captured " + app
+                        PickToast.show(toast, screen: screen)
                         if forScroll {
                             self.beginScrollCapture(w, screen: screen)
                         } else if forRecording {
@@ -699,6 +704,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     }
 
     // MARK: - Diagnostics (DEBUG-only; never shipped)
+
 
     #if DEBUG
     private func runSelfTestIfRequested() {

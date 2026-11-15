@@ -172,6 +172,7 @@ final class WindowSelectionOverlay: NSWindow {
     private let onPick: (SCWindow, NSScreen) -> Void
     private let targetScreen: NSScreen
     private var monitor: Any?
+    private var globalMonitor: Any?
 
     init(windows: [SCWindow], onPick: @escaping (SCWindow, NSScreen) -> Void) {
         self.onPick = onPick
@@ -205,10 +206,12 @@ final class WindowSelectionOverlay: NSWindow {
         // Activate first: an LSUIElement app is not frontmost when a hotkey fires,
         // and a window ordered front before activation never becomes key.
         NSApp.activate(ignoringOtherApps: true)
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         makeKeyAndOrderFront(nil)
-        NSLog("SIDESHOT_WINDOWPICK active=%@ key=%@",
+        NSLog("SIDESHOT_WINDOWPICK active=%@ key=%@ windows=%d",
               NSApp.isActive ? "YES" : "NO",
-              isKeyWindow ? "YES" : "NO")
+              isKeyWindow ? "YES" : "NO",
+              (contentView as? WindowSelectionView)?.windowCount ?? -1)
         // A local mouse-moved monitor is the reliable way to drive the hover highlight:
         // it fires regardless of whether this borderless overlay ends up the key window.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
@@ -221,10 +224,22 @@ final class WindowSelectionOverlay: NSWindow {
             }
             return event
         }
+
+        // Fallback: a global monitor sees the click even when our window never gets it
+        // (inactive app, another window on top, focus weirdness). Requires Accessibility,
+        // and is harmless if it never fires.
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            guard let self, let view = self.contentView as? WindowSelectionView else { return }
+            let windowPoint = self.convertPoint(fromScreen: NSEvent.mouseLocation)
+            let viewPoint = view.convert(windowPoint, from: nil)
+            NSLog("SIDESHOT_PICK global-click at %.0f,%.0f", viewPoint.x, viewPoint.y)
+            DispatchQueue.main.async { view.click(at: viewPoint) }
+        }
     }
 
     override func close() {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if let g = globalMonitor { NSEvent.removeMonitor(g); globalMonitor = nil }
         super.close()
     }
 
@@ -244,6 +259,8 @@ final class WindowSelectionView: NSView {
     /// Guards against the click landing twice: once from the overlay's local monitor
     /// and once from this view's own mouseUp.
     private var didPick = false
+
+    var windowCount: Int { windows.count }
 
     var largestWindow: SCWindow? {
         windows.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
@@ -301,8 +318,24 @@ final class WindowSelectionView: NSView {
     }
 
     private func window(at p: NSPoint) -> SCWindow? {
-        windows.filter { $0.frame.contains(p) }
-               .max(by: { $0.windowLayer < $1.windowLayer })
+        let candidates = windows.filter { $0.frame.contains(p) }
+        guard !candidates.isEmpty else { return nil }
+        if candidates.count == 1 { return candidates[0] }
+
+        // Every window that reaches here is at layer 0, so comparing windowLayer picks
+        // an arbitrary one — which meant clicking a window could match the desktop or a
+        // window behind it. CGWindowListCopyWindowInfo returns windows front-to-back;
+        // use that order to pick the one actually under the cursor.
+        let order = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                              kCGNullWindowID) as? [[String: Any]] ?? []
+        var rank: [CGWindowID: Int] = [:]
+        rank.reserveCapacity(order.count)
+        for (i, info) in order.enumerated() {
+            if let num = info[kCGWindowNumber as String] as? CGWindowID { rank[num] = i }
+        }
+        return candidates.min { a, b in
+            (rank[a.windowID] ?? Int.max) < (rank[b.windowID] ?? Int.max)
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -319,9 +352,12 @@ final class WindowSelectionView: NSView {
         guard !didPick else { return }
         guard let w = window(at: p) else {
             // Never fail silently: an unnoticed no-op reads as a broken app.
+            NSLog("SIDESHOT_PICK click at %.0f,%.0f matched NO window", p.x, p.y)
             NSSound.beep()
             return
         }
+        NSLog("SIDESHOT_PICK click at %.0f,%.0f matched '%@'",
+              p.x, p.y, w.owningApplication?.applicationName ?? "?")
         didPick = true
         onPick(w)
     }

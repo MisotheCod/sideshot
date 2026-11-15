@@ -370,6 +370,57 @@ func appKitRect(fromCaptureRect r: CGRect) -> NSRect {
     return NSRect(x: r.minX, y: main.frame.height - r.maxY, width: r.width, height: r.height)
 }
 
+
+// MARK: - Momentary confirmation toast
+
+/// Shows "Recording - Safari" / "Captured - Safari" right after a window pick, so a
+/// silent-looking capture never reads as "nothing happened".
+final class PickToast: NSPanel {
+    private static var current: PickToast?
+
+    static func show(_ text: String, screen: NSScreen) {
+        current?.orderOut(nil)
+        current = nil
+        let size = NSSize(width: 300, height: 44)
+        let panel = PickToast(rect: NSRect(x: screen.frame.midX - size.width / 2,
+                                           y: screen.frame.maxY - size.height - 64,
+                                           width: size.width, height: size.height),
+                              text: text)
+        current = panel
+        panel.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            panel.orderOut(nil)
+            if current === panel { current = nil }
+        }
+    }
+
+    private init(rect: NSRect, text: String) {
+        super.init(contentRect: rect, styleMask: [.borderless], backing: .buffered, defer: false)
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        ignoresMouseEvents = true
+        isReleasedWhenClosed = false
+        contentView = NSHostingView(rootView: PickToastView(text: text))
+    }
+}
+
+struct PickToastView: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            Text(text).font(.system(size: 13, weight: .medium)).lineLimit(1)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Capsule().fill(.regularMaterial))
+        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
+}
+
 // MARK: - Recording indicator (red dot pill, click to stop)
 
 final class RecordIndicator: NSPanel {
