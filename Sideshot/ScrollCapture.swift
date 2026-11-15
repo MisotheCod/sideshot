@@ -76,7 +76,10 @@ final class ScrollCapture {
         raise(window: window)
         try? await Task.sleep(nanoseconds: 250_000_000)
 
-        guard let first = try await captureFrame(window: window, screen: screen) else {
+        // Always start from the top of the page, never from wherever the user left it.
+        try await scrollToTop(window: window, screen: screen)
+
+        guard let first = try await settledFrame(window: window, screen: screen) else {
             throw ScrollCaptureError.noContent
         }
 
@@ -88,17 +91,19 @@ final class ScrollCapture {
         var lastOffset: Int = 0
 
         for _ in 0..<maxFrames {
-            let before = try await captureFrame(window: window, screen: screen)
-            guard let before else { break }
+            guard let before = try await settledFrame(window: window, screen: screen) else { break }
 
             postScroll(direction: direction, pixels: Int(CGFloat(before.height) * scrollFraction), in: window)
-            try? await Task.sleep(nanoseconds: 320_000_000)
+            try? await Task.sleep(nanoseconds: 260_000_000)
 
-            guard let after = try await captureFrame(window: window, screen: screen) else { break }
+            // Wait for the scroll animation to stop: capturing mid-scroll is what
+            // produced the visible seams (a frame caught between two positions).
+            guard let after = try await settledFrame(window: window, screen: screen) else { break }
 
             // If nothing moved, we're either at the end of the page or scrolling the
             // wrong way. Flip once; if it still doesn't move, we're done.
-            guard let offset = Self.matchOffset(previous: before, next: after),
+            let requested = Int(CGFloat(before.height) * scrollFraction)
+            guard let offset = Self.matchOffset(previous: before, next: after, expected: requested),
                   offset > 4 else {
                 if !directionLocked {
                     direction = -direction
@@ -112,7 +117,7 @@ final class ScrollCapture {
             // A full-height match means the frame is identical: we've hit the bottom.
             if offset >= before.height - 4 { break }
 
-            stitcher.append(after, overlap: offset)
+            stitcher.append(after, advance: offset)
             lastOffset = offset
             progress(stitcher.height)
 
@@ -138,6 +143,51 @@ final class ScrollCapture {
         config.width = max(1, Int(window.frame.width * scale))
         config.height = max(1, Int(window.frame.height * scale))
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+
+    /// Capture until two consecutive frames are identical. Stitching a frame caught
+    /// mid-scroll is what produced blurred, misaligned seams.
+    private func settledFrame(window: SCWindow, screen: NSScreen, tries: Int = 8) async throws -> CGImage? {
+        var last: CGImage?
+        var lastGrid: Grid?
+        for _ in 0..<tries {
+            guard let frame = try await captureFrame(window: window, screen: screen) else { return last }
+            if let lg = lastGrid, let g = Self.grid(frame), g.w == lg.w, g.h == lg.h {
+                var identical = true
+                var i = 0
+                while i < g.data.count {
+                    if abs(Int(g.data[i]) - Int(lg.data[i])) > 1 { identical = false; break }
+                    i += 3
+                }
+                if identical { return frame }
+            }
+            last = frame
+            lastGrid = Self.grid(frame)
+            try? await Task.sleep(nanoseconds: 90_000_000)
+        }
+        return last
+    }
+
+    /// Scroll the page to the very top before capturing, so a full-page shot always
+    /// starts at the beginning rather than at the user's current scroll position.
+    private func scrollToTop(window: SCWindow, screen: NSScreen) async throws {
+        var lastGrid: Grid?
+        for _ in 0..<30 {
+            postScroll(direction: 1, pixels: Int(window.frame.height * 3), in: window)
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard let frame = try await captureFrame(window: window, screen: screen),
+                  let g = Self.grid(frame) else { return }
+            if let lg = lastGrid, lg.w == g.w, lg.h == g.h {
+                var moved = false
+                var i = 0
+                while i < g.data.count {
+                    if abs(Int(g.data[i]) - Int(lg.data[i])) > 2 { moved = true; break }
+                    i += 3
+                }
+                if !moved { return }
+            }
+            lastGrid = g
+        }
     }
 
     // MARK: - Scrolling
@@ -166,58 +216,19 @@ final class ScrollCapture {
     /// Finds how far the content moved between two frames, by locating the previous
     /// frame's bottom rows inside the new frame's top rows. Returns the vertical offset
     /// in pixels, or nil when the frames share no matchable band.
-    static func matchOffset(previous: CGImage, next: CGImage) -> Int? {
-        guard let prevRows = rowSignature(previous),
-              let nextRows = rowSignature(next),
-              prevRows.count == nextRows.count else { return nil }
-
-        let h = prevRows.count
-        let minOverlap = max(24, h / 12)     // at least this many rows must agree
-        let maxSearch = h - minOverlap
-
-        var bestOffset = 0
-        var bestScore = Double.greatestFiniteMagnitude
-
-        // Coarse pass, then refine around the winner.
-        var offset = minOverlap
-        while offset <= maxSearch {
-            let score = mismatch(prev: prevRows, next: nextRows, offset: offset)
-            if score < bestScore { bestScore = score; bestOffset = offset }
-            offset += 4
-        }
-        let coarse = bestOffset
-        for candidate in max(minOverlap, coarse - 5)...min(maxSearch, coarse + 5) {
-            let score = mismatch(prev: prevRows, next: nextRows, offset: candidate)
-            if score < bestScore { bestScore = score; bestOffset = candidate }
-        }
-
-        // Reject a weak match: averaged 0-255 difference per sampled value.
-        guard bestScore < 6.0 else { return nil }
-        return bestOffset
+    /// A downsampled luminance grid. Averaging each row to a single byte (the previous
+    /// approach) throws away horizontal structure, so two different rows that happen to
+    /// be equally bright looked identical and the seam landed a few pixels off. Sampling
+    /// columns as well makes the match unambiguous.
+    struct Grid {
+        let w: Int
+        let h: Int
+        let data: [UInt8]
     }
 
-    /// Compare prev[offset...] against next[0...].
-    private static func mismatch(prev: [UInt8], next: [UInt8], offset: Int) -> Double {
-        let h = prev.count
-        let count = h - offset
-        guard count > 0 else { return .greatestFiniteMagnitude }
-        var total = 0
-        var n = 0
-        var i = 0
-        // Sampling every 3rd row keeps this fast enough to run during capture.
-        while i < count {
-            total += abs(Int(prev[offset + i]) - Int(next[i]))
-            n += 1
-            i += 3
-        }
-        return n == 0 ? .greatestFiniteMagnitude : Double(total) / Double(n)
-    }
-
-    /// One averaged-luminance byte per row — cheap, and enough to align text.
-    private static func rowSignature(_ image: CGImage) -> [UInt8]? {
+    static func grid(_ image: CGImage, columns: Int = 128) -> Grid? {
         let w = image.width, h = image.height
         guard w > 0, h > 0 else { return nil }
-        let sampleCols = min(64, w)
         var pixels = [UInt8](repeating: 0, count: w * h)
         guard let ctx = CGContext(data: &pixels, width: w, height: h,
                                   bitsPerComponent: 8, bytesPerRow: w,
@@ -225,40 +236,118 @@ final class ScrollCapture {
                                   bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
 
-        var rows = [UInt8](repeating: 0, count: h)
-        let step = max(1, w / sampleCols)
+        let cw = min(columns, w)
+        let step = max(1, w / cw)
+        var out = [UInt8](repeating: 0, count: cw * h)
         for y in 0..<h {
-            var sum = 0, n = 0
-            var x = 0
-            while x < w {
-                sum += Int(pixels[y * w + x])
-                n += 1
-                x += step
+            let row = y * w
+            let outRow = y * cw
+            for cx in 0..<cw {
+                out[outRow + cx] = pixels[row + min(w - 1, cx * step)]
             }
-            rows[y] = UInt8(clamping: n == 0 ? 0 : sum / n)
         }
-        return rows
+        return Grid(w: cw, h: h, data: out)
+    }
+
+    /// Mean absolute difference between prev[offset...] and next[0...].
+    /// `skipTop` ignores the first rows of `next`, which lets a sticky page header
+    /// (present in every frame but not in the scrolled content) be discounted.
+    static func mismatch(prev: Grid, next: Grid, offset: Int, skipTop: Int = 0) -> Double {
+        let h = prev.h
+        let count = h - offset
+        guard count > skipTop + 8 else { return .greatestFiniteMagnitude }
+        var total = 0
+        var n = 0
+        var i = skipTop
+        while i < count {
+            let pr = (offset + i) * prev.w
+            let nr = i * next.w
+            var x = 0
+            while x < prev.w {
+                total += abs(Int(prev.data[pr + x]) - Int(next.data[nr + x]))
+                n += 1
+                x += 2
+            }
+            i += 2
+        }
+        return n == 0 ? .greatestFiniteMagnitude : Double(total) / Double(n)
+    }
+
+    /// How far the content moved between two frames, in pixels.
+    static func matchOffset(previous: CGImage, next: CGImage, expected: Int? = nil) -> Int? {
+        guard let a = grid(previous), let b = grid(next), a.w == b.w, a.h == b.h else { return nil }
+
+        let h = a.h
+        let minOverlap = max(24, h / 12)
+        let maxSearch = h - minOverlap
+        guard maxSearch > minOverlap else { return nil }
+
+        func search(_ lo: Int, _ hi: Int, step: Int) -> (offset: Int, score: Double)? {
+            guard hi > lo else { return nil }
+            var bestOffset = lo
+            var bestScore = Double.greatestFiniteMagnitude
+            func consider(_ offset: Int) {
+                // Score normally, and again ignoring a possible sticky header.
+                let s = min(mismatch(prev: a, next: b, offset: offset, skipTop: 0),
+                            mismatch(prev: a, next: b, offset: offset, skipTop: 90))
+                if s < bestScore { bestScore = s; bestOffset = offset }
+            }
+            var offset = lo
+            while offset <= hi {
+                consider(offset)
+                offset += step
+            }
+            if step > 1 {
+                let coarse = bestOffset
+                for candidate in max(lo, coarse - step)..<(min(hi, coarse + step) + 1) {
+                    consider(candidate)
+                }
+            }
+            return (bestOffset, bestScore)
+        }
+
+        // We posted a known number of pixels, and browsers honour it closely. Searching
+        // near that first avoids latching onto the wrong repeat of periodic content
+        // (table rows, lists) — which is what shifts a seam by a whole row.
+        if let e = expected, e > minOverlap {
+            let pad = max(24, e / 6)
+            let lo = max(minOverlap, e - pad)
+            let hi = min(maxSearch, e + pad)
+            // Fine 1px sweep: a coarse step can skip the exact offset on content where
+            // every misalignment scores similarly, and one row off is a visible seam.
+            if let best = search(lo, hi, step: 1), best.score < 4.0 { return best.offset }
+        }
+
+        // Tight threshold: a fuzzy match is what leaves a visible line at the seam.
+        if let best = search(minOverlap, maxSearch, step: 3), best.score < 4.0 { return best.offset }
+        return nil
     }
 }
 
 // MARK: - Stitching
 
-/// Accumulates frames into one tall image. Rows that overlap are dropped, so the seam
-/// carries only new content.
+/// Accumulates frames into one tall image.
+///
+/// `advance` is how far the content moved between the previous frame and this one —
+/// which is exactly the number of NEW rows this frame contributes. It is NOT the
+/// overlap: the new rows are the BOTTOM `advance` rows, because the top ones repeat
+/// what was already captured. Getting those two confused re-lays already-seen bands
+/// and leaves a hard seam at every join.
 struct Stitcher {
-    private var frames: [(image: CGImage, overlap: Int)] = []
+    private var frames: [(image: CGImage, advance: Int)] = []
     private let width: Int
     private(set) var height: Int
 
     init(first: CGImage) {
         width = first.width
         height = first.height
-        frames.append((first, 0))
+        frames.append((first, first.height))
     }
 
-    mutating func append(_ image: CGImage, overlap: Int) {
-        frames.append((image, overlap))
-        height += max(0, image.height - overlap)
+    mutating func append(_ image: CGImage, advance: Int) {
+        let a = max(1, min(advance, image.height))
+        frames.append((image, a))
+        height += a
     }
 
     func finish() -> CGImage? {
@@ -268,18 +357,20 @@ struct Stitcher {
                                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
 
-        var y = 0   // from the bottom of the canvas upward, since CG is bottom-origin
+        var placed = 0
         for (index, frame) in frames.enumerated() {
             let h = frame.image.height
-            let skip = index == 0 ? 0 : frame.overlap   // rows already present
-            let drawHeight = h - skip
-            guard drawHeight > 0 else { continue }
-            let src = CGRect(x: 0, y: CGFloat(skip), width: CGFloat(frame.image.width), height: CGFloat(drawHeight))
-            let dst = CGRect(x: 0, y: CGFloat(height - y - drawHeight), width: CGFloat(width), height: CGFloat(drawHeight))
-            if let cropped = frame.image.cropping(to: src) {
-                ctx.draw(cropped, in: dst)
-            }
-            y += drawHeight
+            let advance = index == 0 ? h : frame.advance
+            guard advance > 0 else { continue }
+            // Keep the bottom `advance` rows (top-left origin for cropping).
+            let src = CGRect(x: 0, y: CGFloat(h - advance),
+                             width: CGFloat(frame.image.width), height: CGFloat(advance))
+            guard let cropped = frame.image.cropping(to: src) else { continue }
+            // Bottom-origin placement: first frame at the top of the canvas.
+            let dst = CGRect(x: 0, y: CGFloat(height - placed - advance),
+                             width: CGFloat(width), height: CGFloat(advance))
+            ctx.draw(cropped, in: dst)
+            placed += advance
         }
         return ctx.makeImage()
     }
@@ -365,10 +456,16 @@ extension ScrollCapture {
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             return "scrolltest: could not create context"
         }
-        for y in stride(from: 0, to: pageHeight, by: 12) {
-            let shade = CGFloat((y / 12) % 17) / 17.0
-            ctx.setFillColor(red: shade, green: 1 - shade, blue: (shade * 3).truncatingRemainder(dividingBy: 1), alpha: 1)
-            ctx.fill(CGRect(x: 0, y: y, width: width, height: 6))
+        // Pseudo-random stripes. A repeating pattern makes many offsets score equally
+        // well, which is a property of the fixture, not of real pages.
+        var rng: UInt64 = 0x9E37_79B9_7F4A_7C15
+        for y in stride(from: 0, to: pageHeight, by: 10) {
+            rng = rng &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let r = CGFloat((rng >> 33) % 256) / 255.0
+            rng = rng &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let g = CGFloat((rng >> 33) % 256) / 255.0
+            ctx.setFillColor(red: r, green: g, blue: 1 - r, alpha: 1)
+            ctx.fill(CGRect(x: 0, y: y, width: width, height: 8))
         }
         guard let page = ctx.makeImage() else { return "scrolltest: no page image" }
 
@@ -386,7 +483,7 @@ extension ScrollCapture {
         // Every consecutive pair should report exactly `step`.
         var bad = 0
         for i in 1..<frames.count {
-            let got = matchOffset(previous: frames[i - 1], next: frames[i])
+            let got = matchOffset(previous: frames[i - 1], next: frames[i], expected: step)
             if got != step {
                 bad += 1
                 out.append("  pair \(i): got \(got.map(String.init) ?? "nil") expected \(step)")
@@ -394,13 +491,25 @@ extension ScrollCapture {
         }
         out.append("offsetMatches=\(frames.count - 1 - bad)/\(frames.count - 1)")
 
+
+
         // Stitch and compare height + a few sampled rows against the original.
         var stitcher = Stitcher(first: frames[0])
         for i in 1..<frames.count {
-            stitcher.append(frames[i], overlap: step)
+            stitcher.append(frames[i], advance: step)
         }
         let stitched = stitcher.finish()
         out.append("stitchedHeight=\(stitched?.height ?? -1) expectedApprox=\(frameHeight + step * (frames.count - 1))")
+
+        // The real test: the stitched image must match the source page pixel for pixel.
+        // Any seam shows up here as a non-zero score.
+        if let stitched,
+           let reference = page.cropping(to: CGRect(x: 0, y: 0, width: width, height: stitched.height)),
+           let rg = grid(reference), let sg = grid(stitched) {
+            let diff = mismatch(prev: rg, next: sg, offset: 0)
+            out.append(String(format: "pixelDiff=%.3f %@", diff,
+                              diff < 0.5 ? "SEAMLESS" : "SEAMS PRESENT"))
+        }
 
         let report = out.joined(separator: "\n")
         NSLog("SIDESHOT_SCROLLTEST\n%@", report)
