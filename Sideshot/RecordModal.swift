@@ -114,11 +114,19 @@ final class WindowSelectionOverlay: NSWindow {
 
         let view = WindowSelectionView(frame: targetScreen.frame, windows: windows) { [weak self] w in
             guard let self else { return }
-            self.onPick(w, self.targetScreen)
+            // Capture first, close second: the caller may drop its reference to us
+            // inside onPick, which would otherwise leave `self` dangling for close().
+            let pick = self.onPick
+            let screen = self.targetScreen
             self.close()
+            pick(w, screen)
         }
         contentView = view
     }
+
+    // A borderless window returns false here by default, which stops it becoming key —
+    // and without key status the click never reaches the view.
+    override var canBecomeKey: Bool { true }
 
     func show() {
         makeKeyAndOrderFront(nil)
@@ -151,6 +159,9 @@ final class WindowSelectionView: NSView {
     private let windows: [SCWindow]
     private let onPick: (SCWindow) -> Void
     private var hovered: SCWindow?
+    /// Guards against the click landing twice: once from the overlay's local monitor
+    /// and once from this view's own mouseUp.
+    private var didPick = false
 
     init(frame: NSRect, windows: [SCWindow], onPick: @escaping (SCWindow) -> Void) {
         self.windows = windows
@@ -160,6 +171,7 @@ final class WindowSelectionView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -200,7 +212,17 @@ final class WindowSelectionView: NSView {
     }
 
     func click(at p: NSPoint) {
-        if let w = window(at: p) { onPick(w) }
+        guard !didPick, let w = window(at: p) else { return }
+        didPick = true
+        onPick(w)
+    }
+
+    /// The local monitor in WindowSelectionOverlay only sees events when the app is
+    /// active, which an accessory (menu-bar) app frequently is not — that is why hover
+    /// worked but clicking did nothing. Handling mouseUp in the view makes the click
+    /// work regardless of key/active state.
+    override func mouseUp(with event: NSEvent) {
+        click(at: convert(event.locationInWindow, from: nil))
     }
 
     override func resetCursorRects() {

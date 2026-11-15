@@ -137,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         menu.addItem(item("Capture Area", #selector(captureArea), key: "4", mods: [.command, .shift]))
         menu.addItem(item("Capture Fullscreen", #selector(captureFullscreen), key: "3", mods: [.command, .shift]))
         menu.addItem(item("Capture Window", #selector(captureWindow)))
+        menu.addItem(item("Capture Scrolling Page", #selector(captureScrollPage), key: "6", mods: [.command, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Record…", #selector(recordToggle), key: "5", mods: [.command, .shift]))
         menu.addItem(.separator())
@@ -200,6 +201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         }
         hotkeyManager.register(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), id: 3) { [weak self] in
             self?.recordToggle()
+        }
+        hotkeyManager.register(keyCode: UInt32(kVK_ANSI_6), modifiers: UInt32(cmdKey | shiftKey), id: 4) { [weak self] in
+            self?.captureScrollPage()
         }
         hotkeyManager.install()
     }
@@ -405,7 +409,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
 
     @objc func captureWindow() { presentWindowSelection(forRecording: false) }
 
-    private func presentWindowSelection(forRecording: Bool) {
+    /// ⌘⇧6 — pick a window, then scroll it top to bottom and stitch the result.
+    @objc func captureScrollPage() { presentWindowSelection(forScroll: true) }
+
+    private func presentWindowSelection(forRecording: Bool = false, forScroll: Bool = false) {
         Task {
             do {
                 let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
@@ -414,7 +421,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                     let overlay = WindowSelectionOverlay(windows: windows) { [weak self] w, screen in
                         guard let self else { return }
                         self.windowSelectionWindow = nil
-                        if forRecording {
+                        if forScroll {
+                            self.beginScrollCapture(w, screen: screen)
+                        } else if forRecording {
                             self.startRecording(window: w, screen: screen)
                         } else {
                             self.beginWindowCapture(w, screen: screen)
@@ -426,6 +435,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                     self.updateEscState()
                 }
             } catch { self.notifyError(error) }
+        }
+    }
+
+    private func beginScrollCapture(_ window: SCWindow, screen: NSScreen) {
+        guard !ScrollCapture.shared.isRunning else { return }
+        let hud = ScrollHUD()
+        hud.show()
+        Task {
+            do {
+                let image = try await ScrollCapture.shared.capture(window: window, screen: screen) { px in
+                    DispatchQueue.main.async { hud.update(pixels: px) }
+                }
+                await MainActor.run {
+                    hud.close()
+                    self.handleImageCapture(Capture(image: image,
+                                                    pointSize: CGSize(width: image.width, height: image.height)))
+                }
+            } catch {
+                await MainActor.run {
+                    hud.close()
+                    self.notifyError(error)
+                }
+            }
         }
     }
 
@@ -492,13 +524,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         let ind = RecordIndicator()
         ind.onStop = { [weak self] in self?.stopRecording() }
         recordIndicator = ind
-        ind.makeKeyAndOrderFront(nil)
+        ind.show()
+        // Red dot in the menu bar too, so there's always a sign it's recording even
+        // if the floating pill is hidden behind a full-screen window.
+        statusItem.button?.image = NSImage(systemSymbolName: "record.circle.fill",
+                                           accessibilityDescription: "Recording")
+        statusItem.button?.contentTintColor = .systemRed
         updateEscState()
     }
 
     private func hideRecordIndicator() {
         recordIndicator?.orderOut(nil)
         recordIndicator = nil
+        statusItem.button?.image = NSImage(systemSymbolName: "camera.viewfinder",
+                                           accessibilityDescription: "Sideshot")
+        statusItem.button?.contentTintColor = nil
     }
 
     /// Recording finished: hold it as an unsaved card — NOTHING is written to disk
@@ -525,6 +565,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
 
     #if DEBUG
     private func runSelfTestIfRequested() {
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_SCROLLTEST") {
+            _ = ScrollCapture.debugSelfTest()
+            NSApp.terminate(nil)
+            return
+        }
         if let path = UserDefaults.standard.string(forKey: "SIDESHOT_EDITORTEST_FILE") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.openVideoEditor(for: URL(fileURLWithPath: path))

@@ -310,24 +310,36 @@ struct PreviewView: View {
 final class RecordIndicator: NSPanel {
     var onStop: (() -> Void)?
 
+    /// Fixed size: `NSHostingView.fittingSize` on a freshly built view reports zero,
+    /// which produced a zero-sized (invisible) panel.
+    private static let size = NSSize(width: 208, height: 40)
+
     init() {
-        super.init(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+        super.init(contentRect: NSRect(origin: .zero, size: Self.size),
+                   styleMask: [.borderless], backing: .buffered, defer: false)
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         hidesOnDeactivate = false
         hasShadow = true
         isOpaque = false
         backgroundColor = .clear
+        isReleasedWhenClosed = false
+        ignoresMouseEvents = false
 
         let view = RecordIndicatorView(onStop: { [weak self] in self?.onStop?() })
         let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(origin: .zero, size: Self.size)
         contentView = hosting
-        let size = hosting.fittingSize
+
         let screen = NSScreen.main ?? NSScreen.screens.first!
-        setFrame(NSRect(x: screen.frame.maxX - size.width - 20,
-                        y: screen.frame.maxY - size.height - 20,
-                        width: size.width, height: size.height),
+        setFrame(NSRect(x: screen.frame.maxX - Self.size.width - 20,
+                        y: screen.frame.maxY - Self.size.height - 20,
+                        width: Self.size.width, height: Self.size.height),
                  display: false)
+    }
+
+    func show() {
+        orderFrontRegardless()
     }
 }
 

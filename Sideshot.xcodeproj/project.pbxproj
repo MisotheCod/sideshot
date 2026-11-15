@@ -19,6 +19,7 @@
 		B3212566C0C70DA04C1C171E /* SelectionOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89BA14885684ED35096648BC /* SelectionOverlay.swift */; };
 		DB86B582F81F68027DF1F619 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 14346371BCA6C5BFA8FC5409 /* Sparkle */; };
 		DE1968667B8FFA7DB05A2411 /* CaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 948634906B8D0F2B305BA9C1 /* CaptureEngine.swift */; };
+		DF7C703E1758D04DCFCCBD19 /* ScrollCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EA777FB71F766820837E620 /* ScrollCapture.swift */; };
 		F122BF42E0498B388316BBEE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9053D037CE992FB48F4CE22B /* AppDelegate.swift */; };
 		F1CA393467EA69D89AC92D11 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F20D1DFF435C37F7FF74792 /* main.swift */; };
 /* End PBXBuildFile section */
@@ -29,6 +30,7 @@
 		23AA9A3320D6333C4BDE3C48 /* Naming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Naming.swift; sourceTree = "<group>"; };
 		36A76FA4E0832234D5CFFDBB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		37B4A8B2A3F2D73996B346E9 /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
+		3EA777FB71F766820837E620 /* ScrollCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollCapture.swift; sourceTree = "<group>"; };
 		3F20D1DFF435C37F7FF74792 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		495A79AA101FF9080E37A683 /* Sideshot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sideshot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B71B00468B926A709B5B2E9 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 				37B4A8B2A3F2D73996B346E9 /* OverlayPanel.swift */,
 				94D1FF56F084FFCAE32533FD /* Recorder.swift */,
 				96C913D8EF17CD0563853FFB /* RecordModal.swift */,
+				3EA777FB71F766820837E620 /* ScrollCapture.swift */,
 				89BA14885684ED35096648BC /* SelectionOverlay.swift */,
 				1A70D292D77817940D89367F /* Sideshot.entitlements */,
 				F1AA849EC76EA517128EDCE1 /* VideoEditor.swift */,
@@ -198,6 +201,7 @@
 				7AE79B50592EB66DC0DEA4B3 /* OverlayPanel.swift in Sources */,
 				3859092BBB7716E7DB117585 /* RecordModal.swift in Sources */,
 				7B9741EF59B692AE6EC89A8E /* Recorder.swift in Sources */,
+				DF7C703E1758D04DCFCCBD19 /* ScrollCapture.swift in Sources */,
 				B3212566C0C70DA04C1C171E /* SelectionOverlay.swift in Sources */,
 				5AAA8D915B41BDCFB799ADA0 /* VideoEditor.swift in Sources */,
 				F1CA393467EA69D89AC92D11 /* main.swift in Sources */,
