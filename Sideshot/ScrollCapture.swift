@@ -38,8 +38,12 @@ final class ScrollCapture {
     /// How much of the window we scroll past each step. Leaving overlap is what lets the
     /// matcher find the seam; 0.78 is a compromise between speed and reliability.
     private let scrollFraction: CGFloat = 0.78
-    private let maxFrames = 80
-    private let maxHeight = 30_000
+    private let maxFrames = 120
+    /// In device pixels. A Retina display doubles the point height, so the old 30k
+    /// cap tripped on pages only ~15k points tall.
+    private let maxHeight = 40_000
+    /// Memory guard: the stitcher holds the whole image as RGBA.
+    private let maxPixels = 200_000_000
 
     var isRunning = false
 
@@ -71,14 +75,34 @@ final class ScrollCapture {
         isRunning = true
         defer { isRunning = false }
 
-        // The window must be the frontmost thing receiving scroll events; otherwise the
-        // events land wherever the cursor is. Raise it first.
         raise(window: window)
         try? await Task.sleep(nanoseconds: 250_000_000)
 
-        // Always start from the top of the page, never from wherever the user left it.
-        try await scrollToTop(window: window, screen: screen)
+        // Preferred path: drive the real scroll bar to exact positions. This is the
+        // native equivalent of GoFullPage's window.scrollTo — no smooth scrolling, no
+        // rubber-banding, no guessing where the page ended up.
+        if let target = AXScroll.target(for: window) {
+            sideLog.notice("scroll path=ax-scrollbar")
+            defer { AXScroll.finish(target) }
+            return try await captureByScrollBar(window: window, screen: screen,
+                                                target: target, progress: progress)
+        }
+        sideLog.notice("scroll path=wheel-events")
+        return try await captureByWheelEvents(window: window, screen: screen, progress: progress)
+    }
 
+    // MARK: - Exact positioning via the AX scroll bar
+
+    private func captureByScrollBar(window: SCWindow,
+                                    screen: NSScreen,
+                                    target: AXScroll.Target,
+                                    progress: @escaping (Int) -> Void) async throws -> CGImage {
+        let lo = AXScroll.minValue(of: target.bar)
+        let hi = AXScroll.maxValue(of: target.bar)
+        guard hi > lo else { throw ScrollCaptureError.noContent }
+
+        AXScroll.setValue(lo, on: target.bar)
+        try? await Task.sleep(nanoseconds: 140_000_000)
         guard let first = try await settledFrame(window: window, screen: screen) else {
             throw ScrollCaptureError.noContent
         }
@@ -86,45 +110,129 @@ final class ScrollCapture {
         var stitcher = Stitcher(first: first)
         progress(stitcher.height)
 
-        var direction: Int32 = -1   // try scrolling "down" first; flipped below if wrong
-        var directionLocked = false
-        var lastOffset: Int = 0
+        var previous = first
+        var previousValue = AXScroll.value(of: target.bar) ?? lo
+        var step = (hi - lo) * 0.1          // refined after the probe
+        var contentPixels = 0.0
 
-        for _ in 0..<maxFrames {
-            guard let before = try await settledFrame(window: window, screen: screen) else { break }
-
-            postScroll(direction: direction, pixels: Int(CGFloat(before.height) * scrollFraction), in: window)
-            try? await Task.sleep(nanoseconds: 260_000_000)
-
-            // Wait for the scroll animation to stop: capturing mid-scroll is what
-            // produced the visible seams (a frame caught between two positions).
-            guard let after = try await settledFrame(window: window, screen: screen) else { break }
-
-            // If nothing moved, we're either at the end of the page or scrolling the
-            // wrong way. Flip once; if it still doesn't move, we're done.
-            let requested = Int(CGFloat(before.height) * scrollFraction)
-            guard let offset = Self.matchOffset(previous: before, next: after, expected: requested),
-                  offset > 4 else {
-                if !directionLocked {
-                    direction = -direction
-                    directionLocked = true
-                    continue
+        // Probe a small step to learn how many pixels a unit of scroll bar travel is
+        // worth, which gives the document height and therefore a sensible step size.
+        let probe = (hi - lo) * 0.05
+        if probe > 0, AXScroll.setValue(min(hi, lo + probe), on: target.bar) {
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            if let frame = try await settledFrame(window: window, screen: screen) {
+                let v = AXScroll.value(of: target.bar) ?? (lo + probe)
+                let dv = max(1e-6, v - previousValue)
+                if let moved = Self.matchOffset(previous: previous, next: frame, expected: nil), moved > 4 {
+                    contentPixels = Double(moved) / dv
+                    let viewport = Double(first.height)
+                    let desired = 0.72 * viewport                 // advance per frame
+                    step = min(hi - lo, max(probe, desired / max(viewport, contentPixels)))
+                    stitcher.append(frame, advance: moved)
+                    previous = frame
+                    previousValue = v
+                    progress(stitcher.height)
                 }
-                break
             }
-            directionLocked = true
+        }
 
-            // A full-height match means the frame is identical: we've hit the bottom.
-            if offset >= before.height - 4 { break }
+        var guardCount = 0
+        while guardCount < maxFrames {
+            guardCount += 1
+            let current = AXScroll.value(of: target.bar) ?? previousValue
+            if current >= hi - 1e-9 { break }
 
-            stitcher.append(after, advance: offset)
-            lastOffset = offset
+            let next = min(hi, current + step)
+            guard AXScroll.setValue(next, on: target.bar) else { break }
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard let frame = try await settledFrame(window: window, screen: screen) else { break }
+
+            let v = AXScroll.value(of: target.bar) ?? next
+            let expected = contentPixels > 0 ? Int(((v - previousValue) * contentPixels).rounded()) : nil
+            guard let moved = Self.matchOffset(previous: previous, next: frame,
+                                               expected: expected), moved > 2 else { break }
+
+            stitcher.append(frame, advance: moved)
+            previous = frame
+            previousValue = v
             progress(stitcher.height)
-
-            if stitcher.height > maxHeight {
+            if stitcher.height > maxHeight { throw ScrollCaptureError.tooTall(maxHeight) }
+            if stitcher.height * stitcher.width > maxPixels {
                 throw ScrollCaptureError.tooTall(maxHeight)
             }
-            if lastOffset == 0 { break }
+        }
+
+        guard let image = stitcher.finish() else { throw ScrollCaptureError.framesDidNotMatch }
+        return image
+    }
+
+    // MARK: - Fallback: synthetic wheel events
+
+    private func captureByWheelEvents(window: SCWindow,
+                                      screen: NSScreen,
+                                      progress: @escaping (Int) -> Void) async throws -> CGImage {
+        // Park the pointer inside the window for the duration, then put it back.
+        let savedCursor = CGEvent(source: nil)?.location ?? .zero
+        warpCursor(to: CGPoint(x: window.frame.midX, y: window.frame.midY))
+        defer { warpCursor(to: savedCursor) }
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        // Always start from the top of the page, never from wherever the user left it.
+        try await scrollToTop(window: window, screen: screen)
+
+        guard let rawFirst = try await settledFrame(window: window, screen: screen) else {
+            throw ScrollCaptureError.noContent
+        }
+
+        let requested = Int(CGFloat(rawFirst.height) * scrollFraction)
+
+        // Probe one scroll. Two things come out of it: the real frame offset, and the
+        // number of rows at the frame's bottom edge that are fixed window chrome
+        // (rounded corner / shadow). Those rows never change when the page scrolls, and
+        // stitching them is what left a dark band at every join.
+        postScroll(direction: -1, pixels: requested, in: window)
+        try? await Task.sleep(nanoseconds: 260_000_000)
+        guard let rawSecond = try await settledFrame(window: window, screen: screen) else {
+            // Page fits the window — one frame is the whole thing.
+            guard let image = Stitcher(first: rawFirst).finish() else {
+                throw ScrollCaptureError.framesDidNotMatch
+            }
+            return image
+        }
+
+        let chrome = bottomChromeRows(rawFirst, rawSecond)
+        let first = cropBottom(rawFirst, chrome)
+        var previous = cropBottom(rawSecond, chrome)
+        sideLog.notice("scroll chromeRows=\(chrome, privacy: .public)")
+
+        var stitcher = Stitcher(first: first)
+        progress(stitcher.height)
+
+        guard let firstOffset = Self.matchOffset(previous: first, next: previous, expected: requested),
+              firstOffset > 4 else {
+            // Nothing moved: the page fits the window.
+            guard let image = stitcher.finish() else { throw ScrollCaptureError.framesDidNotMatch }
+            return image
+        }
+        stitcher.append(previous, advance: firstOffset)
+        progress(stitcher.height)
+
+        for _ in 0..<maxFrames {
+            postScroll(direction: -1, pixels: requested, in: window)
+            try? await Task.sleep(nanoseconds: 240_000_000)
+            guard let raw = try await settledFrame(window: window, screen: screen) else { break }
+            let after = cropBottom(raw, chrome)
+
+            guard let offset = Self.matchOffset(previous: previous, next: after, expected: requested),
+                  offset > 4, offset < previous.height - 4 else { break }
+
+            stitcher.append(after, advance: offset)
+            previous = after
+            progress(stitcher.height)
+            if stitcher.height > maxHeight { throw ScrollCaptureError.tooTall(maxHeight) }
+            if stitcher.height * stitcher.width > maxPixels {
+                throw ScrollCaptureError.tooTall(maxHeight)
+            }
         }
 
         guard let image = stitcher.finish() else { throw ScrollCaptureError.framesDidNotMatch }
@@ -143,6 +251,39 @@ final class ScrollCapture {
         config.width = max(1, Int(window.frame.width * scale))
         config.height = max(1, Int(window.frame.height * scale))
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+
+    /// Rows at the bottom of the frame that did NOT change when the page scrolled —
+    /// i.e. fixed window chrome (rounded corner, shadow, status bar), not content.
+    /// Those rows get baked into every seam if they are stitched.
+    private func bottomChromeRows(_ a: CGImage, _ b: CGImage, maxRows: Int = 48) -> Int {
+        guard let ga = Self.grid(a), let gb = Self.grid(b), ga.w == gb.w, ga.h == gb.h else { return 0 }
+        var rows = 0
+        var y = ga.h - 1
+        while y > ga.h - 1 - maxRows && y >= 0 {
+            let base = y * ga.w * 3
+            var total = 0
+            var n = 0
+            var x = 0
+            while x < ga.w {
+                let p = base + x * 3
+                total += abs(Int(ga.data[p]) - Int(gb.data[p]))
+                total += abs(Int(ga.data[p + 1]) - Int(gb.data[p + 1]))
+                total += abs(Int(ga.data[p + 2]) - Int(gb.data[p + 2]))
+                n += 3
+                x += 2
+            }
+            let mean = n == 0 ? 999.0 : Double(total) / Double(n)
+            if mean < 2.0 { rows += 1; y -= 1 } else { break }
+        }
+        return rows
+    }
+
+    private func cropBottom(_ image: CGImage, _ rows: Int) -> CGImage {
+        guard rows > 0, rows < image.height - 8 else { return image }
+        return image.cropping(to: CGRect(x: 0, y: 0,
+                                         width: image.width,
+                                         height: image.height - rows)) ?? image
     }
 
     /// Capture until two consecutive frames are identical. Stitching a frame caught
@@ -199,6 +340,14 @@ final class ScrollCapture {
         NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
     }
 
+    /// macOS delivers scroll-wheel events to the window under the PHYSICAL cursor and
+    /// ignores `CGEvent.location`. Unless the pointer is inside the target window, the
+    /// page never moves and the capture silently returns a single viewport.
+    private func warpCursor(to point: CGPoint) {
+        CGWarpMouseCursorPosition(point)
+        CGAssociateMouseAndMouseCursorPosition(1)
+    }
+
     private func postScroll(direction: Int32, pixels: Int, in window: SCWindow) {
         let point = CGPoint(x: window.frame.midX, y: window.frame.midY)
         guard let event = CGEvent(scrollWheelEvent2Source: nil,
@@ -226,24 +375,30 @@ final class ScrollCapture {
         let data: [UInt8]
     }
 
+    /// Colour samples, not luminance. Panels that differ only in hue have identical
+    /// brightness, so a grey grid makes them interchangeable and the matcher locks onto
+    /// a repeating section — the page then appears to scroll forever.
     static func grid(_ image: CGImage, columns: Int = 128) -> Grid? {
         let w = image.width, h = image.height
         guard w > 0, h > 0 else { return nil }
-        var pixels = [UInt8](repeating: 0, count: w * h)
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
         guard let ctx = CGContext(data: &pixels, width: w, height: h,
-                                  bitsPerComponent: 8, bytesPerRow: w,
-                                  space: CGColorSpaceCreateDeviceGray(),
-                                  bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+                                  bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
 
         let cw = min(columns, w)
         let step = max(1, w / cw)
-        var out = [UInt8](repeating: 0, count: cw * h)
+        var out = [UInt8](repeating: 0, count: cw * h * 3)
         for y in 0..<h {
-            let row = y * w
-            let outRow = y * cw
+            let srcRow = y * w * 4
+            let outRow = y * cw * 3
             for cx in 0..<cw {
-                out[outRow + cx] = pixels[row + min(w - 1, cx * step)]
+                let sx = srcRow + min(w - 1, cx * step) * 4
+                out[outRow + cx * 3] = pixels[sx]
+                out[outRow + cx * 3 + 1] = pixels[sx + 1]
+                out[outRow + cx * 3 + 2] = pixels[sx + 2]
             }
         }
         return Grid(w: cw, h: h, data: out)
@@ -260,12 +415,16 @@ final class ScrollCapture {
         var n = 0
         var i = skipTop
         while i < count {
-            let pr = (offset + i) * prev.w
-            let nr = i * next.w
+            let pr = (offset + i) * prev.w * 3
+            let nr = i * next.w * 3
             var x = 0
             while x < prev.w {
-                total += abs(Int(prev.data[pr + x]) - Int(next.data[nr + x]))
-                n += 1
+                let p = pr + x * 3
+                let q = nr + x * 3
+                total += abs(Int(prev.data[p]) - Int(next.data[q]))
+                total += abs(Int(prev.data[p + 1]) - Int(next.data[q + 1]))
+                total += abs(Int(prev.data[p + 2]) - Int(next.data[q + 2]))
+                n += 3
                 x += 2
             }
             i += 2
@@ -335,7 +494,7 @@ final class ScrollCapture {
 /// and leaves a hard seam at every join.
 struct Stitcher {
     private var frames: [(image: CGImage, advance: Int)] = []
-    private let width: Int
+    private(set) var width: Int
     private(set) var height: Int
 
     init(first: CGImage) {
