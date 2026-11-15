@@ -16,6 +16,7 @@
 		5AAA8D915B41BDCFB799ADA0 /* VideoEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AA849EC76EA517128EDCE1 /* VideoEditor.swift */; };
 		7AE79B50592EB66DC0DEA4B3 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B4A8B2A3F2D73996B346E9 /* OverlayPanel.swift */; };
 		7B9741EF59B692AE6EC89A8E /* Recorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D1FF56F084FFCAE32533FD /* Recorder.swift */; };
+		B2C6E483C8E47D34A2F828B2 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8F9C64F4FCAC3B1598F59F /* Log.swift */; };
 		B3212566C0C70DA04C1C171E /* SelectionOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89BA14885684ED35096648BC /* SelectionOverlay.swift */; };
 		DB86B582F81F68027DF1F619 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 14346371BCA6C5BFA8FC5409 /* Sparkle */; };
 		DE1968667B8FFA7DB05A2411 /* CaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 948634906B8D0F2B305BA9C1 /* CaptureEngine.swift */; };
@@ -35,6 +36,7 @@
 		495A79AA101FF9080E37A683 /* Sideshot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sideshot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B71B00468B926A709B5B2E9 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		52985D11E209A1FEB0D4AFB9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7A8F9C64F4FCAC3B1598F59F /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		7ADFEE2FDD3B834787EE02A6 /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		89BA14885684ED35096648BC /* SelectionOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlay.swift; sourceTree = "<group>"; };
 		9053D037CE992FB48F4CE22B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				948634906B8D0F2B305BA9C1 /* CaptureEngine.swift */,
 				4B71B00468B926A709B5B2E9 /* HotkeyManager.swift */,
 				36A76FA4E0832234D5CFFDBB /* Info.plist */,
+				7A8F9C64F4FCAC3B1598F59F /* Log.swift */,
 				3F20D1DFF435C37F7FF74792 /* main.swift */,
 				23AA9A3320D6333C4BDE3C48 /* Naming.swift */,
 				7ADFEE2FDD3B834787EE02A6 /* Onboarding.swift */,
@@ -196,6 +199,7 @@
 				F122BF42E0498B388316BBEE /* AppDelegate.swift in Sources */,
 				DE1968667B8FFA7DB05A2411 /* CaptureEngine.swift in Sources */,
 				169B030313A508FA1805D03D /* HotkeyManager.swift in Sources */,
+				B2C6E483C8E47D34A2F828B2 /* Log.swift in Sources */,
 				24199E923110D22D2F15A584 /* Naming.swift in Sources */,
 				25DFFEF131C8B9BE474161C1 /* Onboarding.swift in Sources */,
 				7AE79B50592EB66DC0DEA4B3 /* OverlayPanel.swift in Sources */,

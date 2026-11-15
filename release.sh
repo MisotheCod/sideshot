@@ -45,10 +45,23 @@ if [[ ! -x "${SPARKLE_DIR}/bin/generate_appcast" ]]; then
 fi
 
 echo "==> Building (universal, Release)"
+# Sign manually after the build. Ad-hoc signing changes the cdhash every time, and
+# macOS then treats each build as a new app, wiping Screen Recording permission on
+# every update. A real identity yields a stable designated requirement instead.
 xcodebuild -project Sideshot.xcodeproj -scheme Sideshot -configuration Release \
-  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build >/dev/null
+  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build >/dev/null
 
 APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Sideshot-*/Build/Products/Release/Sideshot.app | head -1)
+
+SIGN_ID="${SIDESHOT_SIGN_ID:-Apple Development: Cameron Robinson (UZ77KFPK83)}"
+echo "==> Signing with ${SIGN_ID}"
+codesign --force --deep --options runtime --timestamp=none \
+  --sign "${SIGN_ID}" \
+  --entitlements Sideshot/Sideshot.entitlements \
+  "${APP}"
+codesign --verify --deep --strict "${APP}"
+codesign -d -r- "${APP}" 2>&1 | grep -i "designated" || true
 
 STAGE=$(mktemp -d)
 ZIP_NAME="Sideshot-${TAG}.zip"

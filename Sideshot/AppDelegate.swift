@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         if !UserDefaults.standard.bool(forKey: "DidShowOnboarding") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showOnboarding() }
         }
+        logPermissionState()
+
         #if DEBUG
         runSelfTestIfRequested()
         #endif
@@ -570,6 +572,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                     self.startBorderFollow()
                 }
             } catch { self.notifyError(error) }
+        }
+    }
+
+    /// Screenshot/recording capture is gated by TCC. Log the real state at launch so a
+    /// "nothing happens" report can be diagnosed from the log instead of guessed at.
+    private func logPermissionState() {
+        let screen = CGPreflightScreenCaptureAccess()
+        let ax = AXIsProcessTrusted()
+        sideLog.notice("perm screenCapture=\(screen, privacy: .public) accessibility=\(ax, privacy: .public) path=\(Bundle.main.bundlePath, privacy: .public)")
+
+        // Without Screen Recording the app cannot enumerate or capture a single window,
+        // which looks exactly like "the feature is broken". Say so plainly instead.
+        if !screen {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                let alert = NSAlert()
+                alert.messageText = "Sideshot needs Screen Recording"
+                alert.informativeText = """
+                macOS blocks every screenshot and screen recording until this is granted,                 so the window picker and recording do nothing at all.
+
+                Click Open Settings, switch Sideshot on, then quit and reopen Sideshot.
+                """
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "Open Settings")
+                alert.addButton(withTitle: "Later")
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn {
+                    self.openScreenRecordingSettings()
+                }
+            }
         }
     }
 

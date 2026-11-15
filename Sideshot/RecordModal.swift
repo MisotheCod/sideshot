@@ -208,10 +208,7 @@ final class WindowSelectionOverlay: NSWindow {
         NSApp.activate(ignoringOtherApps: true)
         NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         makeKeyAndOrderFront(nil)
-        NSLog("SIDESHOT_WINDOWPICK active=%@ key=%@ windows=%d",
-              NSApp.isActive ? "YES" : "NO",
-              isKeyWindow ? "YES" : "NO",
-              (contentView as? WindowSelectionView)?.windowCount ?? -1)
+        sideLog.notice("windowpick active=\(NSApp.isActive, privacy: .public) key=\(self.isKeyWindow, privacy: .public) windows=\((self.contentView as? WindowSelectionView)?.windowCount ?? -1, privacy: .public)")
         // A local mouse-moved monitor is the reliable way to drive the hover highlight:
         // it fires regardless of whether this borderless overlay ends up the key window.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
@@ -232,7 +229,7 @@ final class WindowSelectionOverlay: NSWindow {
             guard let self, let view = self.contentView as? WindowSelectionView else { return }
             let windowPoint = self.convertPoint(fromScreen: NSEvent.mouseLocation)
             let viewPoint = view.convert(windowPoint, from: nil)
-            NSLog("SIDESHOT_PICK global-click at %.0f,%.0f", viewPoint.x, viewPoint.y)
+            sideLog.notice("global-click at \(viewPoint.x, privacy: .public),\(viewPoint.y, privacy: .public)")
             DispatchQueue.main.async { view.click(at: viewPoint) }
         }
     }
@@ -352,12 +349,11 @@ final class WindowSelectionView: NSView {
         guard !didPick else { return }
         guard let w = window(at: p) else {
             // Never fail silently: an unnoticed no-op reads as a broken app.
-            NSLog("SIDESHOT_PICK click at %.0f,%.0f matched NO window", p.x, p.y)
+            sideLog.notice("click at \(p.x, privacy: .public),\(p.y, privacy: .public) matched NO window")
             NSSound.beep()
             return
         }
-        NSLog("SIDESHOT_PICK click at %.0f,%.0f matched '%@'",
-              p.x, p.y, w.owningApplication?.applicationName ?? "?")
+        sideLog.notice("click at \(p.x, privacy: .public),\(p.y, privacy: .public) matched \(w.owningApplication?.applicationName ?? "?", privacy: .public)")
         didPick = true
         onPick(w)
     }
