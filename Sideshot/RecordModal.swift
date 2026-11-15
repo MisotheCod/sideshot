@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 import ScreenCaptureKit
 
-// MARK: - ⌘⇧5 record picker: bottom toolbar over a dim overlay
+// MARK: - ⌘⇧5 unified picker: Screenshot | Record, then Screen / Window / Area
 
-final class RecordModePanel: NSPanel {
-    enum RecordMode { case screen, window, area }
+final class CapturePickerPanel: NSPanel {
+    enum Kind { case screenshot, record }
+    enum Target { case screen, window, area }
 
-    var onChoose: ((RecordMode) -> Void)?
+    var onChoose: ((Kind, Target) -> Void)?
 
     init() {
         let screen = NSScreen.main ?? NSScreen.screens.first!
@@ -20,37 +21,76 @@ final class RecordModePanel: NSPanel {
         isReleasedWhenClosed = false
         acceptsMouseMovedEvents = true
 
-        let view = RecordModeView(onPick: { [weak self] mode in self?.choose(mode) },
-                                  onCancel: { [weak self] in self?.close(); self?.onChoose = nil })
+        let view = CapturePickerView(
+            onChoose: { [weak self] kind, target in self?.choose(kind, target) },
+            onCancel: { [weak self] in self?.close(); self?.onChoose = nil }
+        )
         contentView = NSHostingView(rootView: view)
     }
+
+    override var canBecomeKey: Bool { true }
 
     func present() {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func choose(_ mode: RecordMode) {
+    private func choose(_ kind: Kind, _ target: Target) {
+        let handler = onChoose
         close()
-        onChoose?(mode)
+        onChoose = nil
+        handler?(kind, target)
     }
 }
 
-struct RecordModeView: View {
-    let onPick: (RecordModePanel.RecordMode) -> Void
+struct CapturePickerView: View {
+    let onChoose: (CapturePickerPanel.Kind, CapturePickerPanel.Target) -> Void
     let onCancel: () -> Void
+
+    @State private var kind: CapturePickerPanel.Kind
+
+    init(initial: CapturePickerPanel.Kind = .screenshot,
+         onChoose: @escaping (CapturePickerPanel.Kind, CapturePickerPanel.Target) -> Void,
+         onCancel: @escaping () -> Void) {
+        self.onChoose = onChoose
+        self.onCancel = onCancel
+        _kind = State(initialValue: initial)
+    }
+
+    private var recording: Bool { kind == .record }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.black.opacity(0.45).ignoresSafeArea()
+            Color.black.opacity(0.35).ignoresSafeArea()
 
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    ModeButton(icon: "display", title: "Screen") { onPick(.screen) }
-                    ModeButton(icon: "macwindow", title: "Window") { onPick(.window) }
-                    ModeButton(icon: "rectangle.dashed", title: "Area") { onPick(.area) }
+            VStack(spacing: 14) {
+                // The switch that was missing: what am I about to do?
+                HStack(spacing: 4) {
+                    segment("Screenshot", icon: "camera", value: .screenshot)
+                    segment("Record", icon: "record.circle", value: .record)
                 }
-                Text("Click a mode, or press Esc to cancel")
+                .padding(4)
+                .background(Capsule().fill(Color.primary.opacity(0.08)))
+
+                Text(recording ? "Choose what to record" : "Choose what to capture")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.primary.opacity(0.85))
+
+                HStack(spacing: 12) {
+                    ModeButton(icon: "display", title: "Screen", recording: recording) {
+                        onChoose(kind, .screen)
+                    }
+                    ModeButton(icon: "macwindow", title: "Window", recording: recording) {
+                        onChoose(kind, .window)
+                    }
+                    ModeButton(icon: "rectangle.dashed", title: "Area", recording: recording) {
+                        onChoose(kind, .area)
+                    }
+                }
+
+                Text(recording
+                     ? "Recording starts right away — the REC pill stops it"
+                     : "Captured straight into the side stack")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -63,15 +103,42 @@ struct RecordModeView: View {
                     .shadow(color: .black.opacity(0.4), radius: 18, y: 6)
             )
             .padding(.bottom, 48)
-            .frame(width: 360)
+            .frame(width: 420)
         }
         .onExitCommand { onCancel() }
+    }
+
+    @ViewBuilder
+    private func segment(_ title: String, icon: String, value: CapturePickerPanel.Kind) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { kind = value }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12, weight: .semibold))
+                Text(title).font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(selectedColor(value))
+            .padding(.horizontal, 18).padding(.vertical, 7)
+            .background(Capsule().fill(kind == value ? selectedFill(value) : Color.clear))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func selectedColor(_ v: CapturePickerPanel.Kind) -> Color {
+        guard kind == v else { return .secondary }
+        return v == .record ? .red : .primary
+    }
+
+    private func selectedFill(_ v: CapturePickerPanel.Kind) -> Color {
+        v == .record ? Color.red.opacity(0.16) : Color.primary.opacity(0.12)
     }
 }
 
 struct ModeButton: View {
     let icon: String
     let title: String
+    var recording: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -79,14 +146,16 @@ struct ModeButton: View {
             VStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 24, weight: .regular))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(recording ? .red : .secondary)
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
             }
             .frame(width: 100)
             .frame(height: 82)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.05)))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.1), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 10)
+                .fill(recording ? Color.red.opacity(0.08) : Color.primary.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .stroke(recording ? Color.red.opacity(0.35) : Color.primary.opacity(0.1), lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
@@ -153,6 +222,10 @@ final class WindowSelectionOverlay: NSWindow {
     func debugHoverLargest() {
         (contentView as? WindowSelectionView)?.debugHoverLargest()
     }
+
+    func debugClickLargest() {
+        (contentView as? WindowSelectionView)?.debugClickLargest()
+    }
 }
 
 final class WindowSelectionView: NSView {
@@ -194,6 +267,12 @@ final class WindowSelectionView: NSView {
             hovered = w
             needsDisplay = true
         }
+    }
+
+    func debugClickLargest() {
+        guard let w = windows.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+        else { return }
+        click(at: NSPoint(x: w.frame.midX, y: w.frame.midY))
     }
 
     private func window(at p: NSPoint) -> SCWindow? {

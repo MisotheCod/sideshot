@@ -309,12 +309,14 @@ struct PreviewView: View {
 
 final class RecordIndicator: NSPanel {
     var onStop: (() -> Void)?
+    private let source: String
 
     /// Fixed size: `NSHostingView.fittingSize` on a freshly built view reports zero,
     /// which produced a zero-sized (invisible) panel.
-    private static let size = NSSize(width: 208, height: 40)
+    private static let size = NSSize(width: 248, height: 40)
 
-    init() {
+    init(source: String = "Screen") {
+        self.source = source
         super.init(contentRect: NSRect(origin: .zero, size: Self.size),
                    styleMask: [.borderless], backing: .buffered, defer: false)
         level = .statusBar
@@ -326,7 +328,7 @@ final class RecordIndicator: NSPanel {
         isReleasedWhenClosed = false
         ignoresMouseEvents = false
 
-        let view = RecordIndicatorView(onStop: { [weak self] in self?.onStop?() })
+        let view = RecordIndicatorView(source: source, onStop: { [weak self] in self?.onStop?() })
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: Self.size)
         contentView = hosting
@@ -344,6 +346,7 @@ final class RecordIndicator: NSPanel {
 }
 
 struct RecordIndicatorView: View {
+    let source: String
     let onStop: () -> Void
     @State private var seconds = 0
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -355,6 +358,9 @@ struct RecordIndicatorView: View {
                 Text("REC \(timeString)")
                     .font(.system(size: 12, weight: .semibold))
                     .monospacedDigit()
+                Text(source)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
                 Text("tap to stop")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)

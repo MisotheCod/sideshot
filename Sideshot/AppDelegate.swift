@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import ScreenCaptureKit
 import Sparkle
+import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegate {
     private var statusItem: NSStatusItem!
@@ -17,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private var onboardingWindow: OnboardingWindow?
     private var annotateWindow: AnnotateWindow?
     private var videoEditorWindows: [VideoEditorWindow] = []
-    private var recordModePanel: RecordModePanel?
+    private var capturePicker: CapturePickerPanel?
     private var windowSelectionWindow: NSWindow?
 
     // MARK: - Launch
@@ -139,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         menu.addItem(item("Capture Window", #selector(captureWindow)))
         menu.addItem(item("Capture Scrolling Page", #selector(captureScrollPage), key: "6", mods: [.command, .shift]))
         menu.addItem(.separator())
-        menu.addItem(item("Record…", #selector(recordToggle), key: "5", mods: [.command, .shift]))
+        menu.addItem(item("Capture or Record…", #selector(recordToggle), key: "5", mods: [.command, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Copy Last Capture", #selector(copyLast)))
         menu.addItem(item("Save Last Capture", #selector(saveLast)))
@@ -383,26 +384,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     // MARK: - Recording
 
     @objc func recordToggle() {
-        if Recorder.shared.isRecording { stopRecording() } else { presentRecordMode() }
+        if Recorder.shared.isRecording { stopRecording() } else { presentCapturePicker() }
     }
 
-    private func presentRecordMode() {
+    /// ⌘⇧5 — one picker for everything: screenshot or record, then screen / window / area.
+    private func presentCapturePicker() {
         guard !Recorder.shared.isRecording else { return }
-        if recordModePanel == nil {
-            let panel = RecordModePanel()
-            panel.onChoose = { [weak self] mode in self?.chooseRecordMode(mode) }
-            recordModePanel = panel
+        if capturePicker == nil {
+            let panel = CapturePickerPanel()
+            panel.onChoose = { [weak self] kind, target in self?.chooseCapture(kind, target) }
+            capturePicker = panel
         }
-        recordModePanel?.present()
+        capturePicker?.present()
         updateEscState()
     }
 
-    private func chooseRecordMode(_ mode: RecordModePanel.RecordMode) {
-        recordModePanel = nil
-        switch mode {
-        case .screen: startRecording(region: nil, screen: NSScreen.main ?? NSScreen.screens.first!)
-        case .area: presentSelection(recording: true)
-        case .window: presentWindowSelection(forRecording: true)
+    private func chooseCapture(_ kind: CapturePickerPanel.Kind, _ target: CapturePickerPanel.Target) {
+        capturePicker = nil
+        switch (kind, target) {
+        case (.screenshot, .screen): captureFullscreen()
+        case (.screenshot, .window): presentWindowSelection(forRecording: false)
+        case (.screenshot, .area):   presentSelection(recording: false)
+        case (.record, .screen):     startRecording(region: nil, screen: NSScreen.main ?? NSScreen.screens.first!)
+        case (.record, .window):     presentWindowSelection(forRecording: true)
+        case (.record, .area):       presentSelection(recording: true)
         }
         updateEscState()
     }
@@ -413,6 +418,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     @objc func captureScrollPage() { presentWindowSelection(forScroll: true) }
 
     private func presentWindowSelection(forRecording: Bool = false, forScroll: Bool = false) {
+        // Tear down any picker still on screen first — otherwise a previous overlay
+        // keeps highlighting windows underneath the new one.
+        windowSelectionWindow?.orderOut(nil)
+        windowSelectionWindow?.close()
+        windowSelectionWindow = nil
+        capturePicker?.close()
+        capturePicker = nil
+
         Task {
             do {
                 let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
@@ -420,6 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                 await MainActor.run {
                     let overlay = WindowSelectionOverlay(windows: windows) { [weak self] w, screen in
                         guard let self else { return }
+                        self.windowSelectionWindow?.orderOut(nil)
                         self.windowSelectionWindow = nil
                         if forScroll {
                             self.beginScrollCapture(w, screen: screen)
@@ -475,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         Task {
             do {
                 try await Recorder.shared.start(region: region, screen: screen)
-                await MainActor.run { self.showRecordIndicator() }
+                await MainActor.run { self.showRecordIndicator(source: region == nil ? "Screen" : "Area") }
             } catch { self.notifyError(error) }
         }
     }
@@ -485,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         Task {
             do {
                 try await Recorder.shared.start(window: window, screen: screen)
-                await MainActor.run { self.showRecordIndicator() }
+                await MainActor.run { self.showRecordIndicator(source: "Window") }
             } catch { self.notifyError(error) }
         }
     }
@@ -495,7 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private func updateEscState() {
         let active = selectionWindow != nil
             || windowSelectionWindow != nil
-            || (recordModePanel?.isVisible ?? false)
+            || (capturePicker?.isVisible ?? false)
             || Recorder.shared.isRecording
         hotkeyManager.enableEsc(active ? { [weak self] in self?.escPressed() } : nil)
     }
@@ -503,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private func escPressed() {
         if let w = selectionWindow { w.close(); selectionWindow = nil }
         else if let w = windowSelectionWindow { w.close(); windowSelectionWindow = nil }
-        else if let m = recordModePanel, m.isVisible { m.close(); recordModePanel = nil }
+        else if let m = capturePicker, m.isVisible { m.close(); capturePicker = nil }
         else if Recorder.shared.isRecording { stopRecording() }
         updateEscState()
     }
@@ -519,9 +533,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         }
     }
 
-    private func showRecordIndicator() {
+    private func showRecordIndicator(source: String) {
         hideRecordIndicator()
-        let ind = RecordIndicator()
+        let ind = RecordIndicator(source: source)
         ind.onStop = { [weak self] in self?.stopRecording() }
         recordIndicator = ind
         ind.show()
@@ -582,7 +596,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
             }
         }
         if UserDefaults.standard.bool(forKey: "SIDESHOT_MODALTEST") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.presentRecordMode() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.presentCapturePicker() }
+        }
+        if let out = UserDefaults.standard.string(forKey: "SIDESHOT_PICKERSHOT") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                for (kind, suffix) in [(CapturePickerPanel.Kind.screenshot, "shot"),
+                                       (CapturePickerPanel.Kind.record, "rec")] {
+                    let view = CapturePickerView(initial: kind, onChoose: { _, _ in }, onCancel: {})
+                    let hosting = NSHostingView(rootView: view)
+                    hosting.frame = NSRect(x: 0, y: 0, width: 460, height: 320)
+                    hosting.layoutSubtreeIfNeeded()
+                    guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { continue }
+                    hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                    if let data = rep.representation(using: .png, properties: [:]) {
+                        let path = out.replacingOccurrences(of: ".png", with: "-\(suffix).png")
+                        try? data.write(to: URL(fileURLWithPath: path))
+                        NSLog("SIDESHOT_PICKERSHOT wrote %@", path)
+                    }
+                }
+                NSApp.terminate(nil)
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_CLICKTEST") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                self.presentWindowSelection(forRecording: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    (self.windowSelectionWindow as? WindowSelectionOverlay)?.debugClickLargest()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        let visible = self.windowSelectionWindow?.isVisible ?? false
+                        NSLog("SIDESHOT_CLICKTEST overlayVisible=%@ recording=%@ indicator=%@ indicatorVisible=%@",
+                              visible ? "YES" : "NO",
+                              Recorder.shared.isRecording ? "YES" : "NO",
+                              self.recordIndicator == nil ? "NO" : "YES",
+                              (self.recordIndicator?.isVisible ?? false) ? "YES" : "NO")
+                        NSApp.terminate(nil)
+                    }
+                }
+            }
         }
         if UserDefaults.standard.bool(forKey: "SIDESHOT_WINDOWTEST") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
