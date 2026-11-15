@@ -19,6 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private var annotateWindow: AnnotateWindow?
     private var videoEditorWindows: [VideoEditorWindow] = []
     private var capturePicker: CapturePickerPanel?
+    private var recordingBorder: RecordingBorderWindow?
+    private var recordingBorderTimer: Timer?
+    private var recordingWindowID: CGWindowID?
+    private var lastCaptureError: String?
+    private var needsScreenPermission = false
     private var windowSelectionWindow: NSWindow?
 
     // MARK: - Launch
@@ -122,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        needsScreenPermission = !CGPreflightScreenCaptureAccess()
 
         func item(_ title: String, _ action: Selector, key: String = "", mods: NSEvent.ModifierFlags = []) -> NSMenuItem {
             let it = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -135,6 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
             menu.addItem(.separator())
         }
 
+        if needsScreenPermission {
+            menu.addItem(item("Screen Recording permission needed…", #selector(openScreenRecordingSettings)))
+            menu.addItem(.separator())
+        }
         menu.addItem(item("Capture Area", #selector(captureArea), key: "4", mods: [.command, .shift]))
         menu.addItem(item("Capture Fullscreen", #selector(captureFullscreen), key: "3", mods: [.command, .shift]))
         menu.addItem(item("Capture Window", #selector(captureWindow)))
@@ -414,6 +424,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
 
     @objc func captureWindow() { presentWindowSelection(forRecording: false) }
 
+    @objc func openScreenRecordingSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+    }
+
     /// ⌘⇧6 — pick a window, then scroll it top to bottom and stitch the result.
     @objc func captureScrollPage() { presentWindowSelection(forScroll: true) }
 
@@ -488,8 +502,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         guard !Recorder.shared.isRecording else { return }
         Task {
             do {
+                // Create the border first so the recorder can exclude it from the stream.
+                await MainActor.run {
+                    if let r = region {
+                        // Selection rect is screen-local with a top-left origin.
+                        let rect = NSRect(x: screen.frame.minX + r.minX,
+                                          y: screen.frame.maxY - r.maxY,
+                                          width: r.width, height: r.height)
+                        self.showRecordingBorder(rect: rect)
+                    } else {
+                        self.showRecordingBorder(rect: screen.frame.insetBy(dx: 2, dy: 2))
+                    }
+                }
                 try await Recorder.shared.start(region: region, screen: screen)
-                await MainActor.run { self.showRecordIndicator(source: region == nil ? "Screen" : "Area") }
+                await MainActor.run {
+                    self.showRecordIndicator(source: region == nil ? "Screen" : "Area")
+                }
             } catch { self.notifyError(error) }
         }
     }
@@ -499,7 +527,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         Task {
             do {
                 try await Recorder.shared.start(window: window, screen: screen)
-                await MainActor.run { self.showRecordIndicator(source: "Window") }
+                await MainActor.run {
+                    self.showRecordIndicator(source: "Window")
+                    self.recordingWindowID = window.windowID
+                    self.showRecordingBorder(rect: appKitRect(fromCaptureRect: window.frame))
+                    self.startBorderFollow()
+                }
             } catch { self.notifyError(error) }
         }
     }
@@ -533,6 +566,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
         }
     }
 
+    /// Draw a pulsing red frame around exactly what is being recorded.
+    private func showRecordingBorder(rect: NSRect) {
+        hideRecordingBorder()
+        guard rect.width > 4, rect.height > 4 else { return }
+        let border = RecordingBorderWindow(rect: rect)
+        recordingBorder = border
+        border.orderFrontRegardless()
+    }
+
+    private func hideRecordingBorder() {
+        recordingBorderTimer?.invalidate()
+        recordingBorderTimer = nil
+        recordingWindowID = nil
+        recordingBorder?.orderOut(nil)
+        recordingBorder?.close()
+        recordingBorder = nil
+    }
+
+    /// Keep the border glued to the window if the user moves or resizes it mid-recording.
+    private func startBorderFollow() {
+        recordingBorderTimer?.invalidate()
+        recordingBorderTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in
+            guard let self, let id = self.recordingWindowID else { return }
+            let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+            guard let info = list?.first,
+                  let boundsDict = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"], let y = boundsDict["Y"],
+                  let w = boundsDict["Width"], let h = boundsDict["Height"],
+                  w > 4, h > 4
+            else { return }
+            self.recordingBorder?.move(to: appKitRect(fromCaptureRect: CGRect(x: x, y: y, width: w, height: h)))
+        }
+    }
+
     private func showRecordIndicator(source: String) {
         hideRecordIndicator()
         let ind = RecordIndicator(source: source)
@@ -548,6 +615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     }
 
     private func hideRecordIndicator() {
+        hideRecordingBorder()
         recordIndicator?.orderOut(nil)
         recordIndicator = nil
         statusItem.button?.image = NSImage(systemSymbolName: "camera.viewfinder",
@@ -573,6 +641,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private func notifyError(_ error: Error) {
         NSSound.beep()
         NSLog("Sideshot error: \(error.localizedDescription)")
+        lastCaptureError = error.localizedDescription
+
+        // Automated diagnostics must not block on a modal alert.
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_REALCLICKSHOT")
+            || UserDefaults.standard.bool(forKey: "SIDESHOT_REALCLICKTEST")
+            || UserDefaults.standard.bool(forKey: "SIDESHOT_SELFTEST") { return }
+
+        // A beep plus a console line is invisible in practice: the capture just seems
+        // to do nothing. Screen Recording permission is revoked by every rebuild, so
+        // tell the user exactly that instead of failing silently.
+        let alert = NSAlert()
+        alert.messageText = "Sideshot couldn't capture that"
+        alert.informativeText = """
+        \(error.localizedDescription)
+
+        This is usually Screen Recording permission. Open System Settings → Privacy & Security → Screen & System Audio Recording and make sure Sideshot is switched on, then try again.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+        }
     }
 
     // MARK: - Diagnostics (DEBUG-only; never shipped)
@@ -615,6 +707,113 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                     }
                 }
                 NSApp.terminate(nil)
+            }
+        }
+        if let out = UserDefaults.standard.string(forKey: "SIDESHOT_BORDERSHOT") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let v = RecordingBorderView(frame: NSRect(x: 0, y: 0, width: 400, height: 240))
+                guard let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else {
+                    NSLog("SIDESHOT_BORDERSHOT no rep"); NSApp.terminate(nil); return
+                }
+                v.cacheDisplay(in: v.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) {
+                    try? data.write(to: URL(fileURLWithPath: out))
+                    NSLog("SIDESHOT_BORDERSHOT wrote %@", out)
+                }
+                NSApp.terminate(nil)
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_BORDERTEST") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                let screen = NSScreen.main ?? NSScreen.screens.first!
+                self.showRecordingBorder(rect: screen.frame.insetBy(dx: 2, dy: 2))
+                Task {
+                    do {
+                        try await Recorder.shared.start(region: nil, screen: screen)
+                        await MainActor.run { self.showRecordIndicator(source: "Screen") }
+                        try? await Task.sleep(nanoseconds: 2_500_000_000)
+                        let url = await Recorder.shared.stop()
+                        await MainActor.run { self.hideRecordIndicator() }
+                        if let url {
+                            let dest = URL(fileURLWithPath: "/tmp/bordertest.mp4")
+                            try? FileManager.default.removeItem(at: dest)
+                            try? FileManager.default.copyItem(at: url, to: dest)
+                            NSLog("SIDESHOT_BORDERTEST wrote %@", dest.path)
+                        } else {
+                            NSLog("SIDESHOT_BORDERTEST no url")
+                        }
+                    } catch {
+                        NSLog("SIDESHOT_BORDERTEST failed %@", error.localizedDescription)
+                    }
+                    NSApp.terminate(nil)
+                }
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_REALCLICKSHOT") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                let before = self.thumbnails.count
+                self.presentWindowSelection(forRecording: false)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    guard let ov = self.windowSelectionWindow,
+                          let view = ov.contentView as? WindowSelectionView,
+                          let target = view.largestWindow else {
+                        NSLog("SIDESHOT_REALCLICKSHOT no overlay"); NSApp.terminate(nil); return
+                    }
+                    let pt = CGPoint(x: target.frame.midX, y: target.frame.midY)
+                    let src = CGEventSource(stateID: .hidSystemState)
+                    CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    usleep(80_000)
+                    CGEvent(mouseEventSource: src, mouseType: .leftMouseDown,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    usleep(80_000)
+                    CGEvent(mouseEventSource: src, mouseType: .leftMouseUp,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                        NSLog("SIDESHOT_REALCLICKSHOT cardsBefore=%d cardsAfter=%d error=%@",
+                              before, self.thumbnails.count,
+                              self.lastCaptureError ?? "none")
+                        NSApp.terminate(nil)
+                    }
+                }
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "SIDESHOT_REALCLICKTEST") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                self.presentWindowSelection(forRecording: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    guard let ov = self.windowSelectionWindow,
+                          let view = ov.contentView as? WindowSelectionView else {
+                        NSLog("SIDESHOT_REALCLICKTEST no overlay"); NSApp.terminate(nil); return
+                    }
+                    guard let target = view.largestWindow else {
+                        NSLog("SIDESHOT_REALCLICKTEST no window"); NSApp.terminate(nil); return
+                    }
+                    let pt = CGPoint(x: target.frame.midX, y: target.frame.midY)
+                    NSLog("SIDESHOT_REALCLICKTEST posting click at %.0f,%.0f", pt.x, pt.y)
+                    let src = CGEventSource(stateID: .hidSystemState)
+                    CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    usleep(80_000)
+                    CGEvent(mouseEventSource: src, mouseType: .leftMouseDown,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    usleep(80_000)
+                    CGEvent(mouseEventSource: src, mouseType: .leftMouseUp,
+                            mouseCursorPosition: pt, mouseButton: .left)?.post(tap: .cghidEventTap)
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        NSLog("SIDESHOT_REALCLICKTEST overlayVisible=%@ recording=%@ indicatorVisible=%@ border=%@",
+                              (self.windowSelectionWindow?.isVisible ?? false) ? "YES" : "NO",
+                              Recorder.shared.isRecording ? "YES" : "NO",
+                              (self.recordIndicator?.isVisible ?? false) ? "YES" : "NO",
+                              (self.recordingBorder?.isVisible ?? false) ? "YES" : "NO")
+                        NSApp.terminate(nil)
+                    }
+                }
             }
         }
         if UserDefaults.standard.bool(forKey: "SIDESHOT_CLICKTEST") {

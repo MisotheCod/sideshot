@@ -305,6 +305,71 @@ struct PreviewView: View {
     }
 }
 
+// MARK: - Red border around whatever is being recorded
+
+/// A click-through frame that hugs the recorded window (or screen/area) for the whole
+/// recording. This is the unmistakable "you are recording right now" signal — far more
+/// legible than a small pill in the corner.
+final class RecordingBorderWindow: NSWindow {
+    init(rect: NSRect) {
+        super.init(contentRect: rect, styleMask: [.borderless], backing: .buffered, defer: false)
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        isReleasedWhenClosed = false
+        contentView = RecordingBorderView(frame: NSRect(origin: .zero, size: rect.size))
+    }
+
+    func move(to rect: NSRect) {
+        setFrame(rect, display: false)
+        contentView?.frame = NSRect(origin: .zero, size: rect.size)
+        contentView?.needsDisplay = true
+    }
+}
+
+final class RecordingBorderView: NSView {
+    private var pulse: CGFloat = 1.0
+    private var timer: Timer?
+
+    override var isFlipped: Bool { false }
+    override var isOpaque: Bool { false }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        timer?.invalidate()
+        guard window != nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.pulse = self.pulse > 0.7 ? 0.45 : 1.0
+            self.needsDisplay = true
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard bounds.width > 2, bounds.height > 2 else { return }
+        let inset = bounds.insetBy(dx: 1.5, dy: 1.5)
+        let path = NSBezierPath(roundedRect: inset, xRadius: 8, yRadius: 8)
+        path.lineWidth = 3
+        NSColor.systemRed.withAlphaComponent(0.55 + 0.45 * pulse).setStroke()
+        path.stroke()
+
+        let glow = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 9, yRadius: 9)
+        glow.lineWidth = 1
+        NSColor.systemRed.withAlphaComponent(0.30 * pulse).setStroke()
+        glow.stroke()
+    }
+}
+
+/// Converts a ScreenCaptureKit / CGWindow rect (top-left origin, global) into AppKit
+/// screen coordinates (bottom-left origin).
+func appKitRect(fromCaptureRect r: CGRect) -> NSRect {
+    guard let main = NSScreen.screens.first else { return .zero }
+    return NSRect(x: r.minX, y: main.frame.height - r.maxY, width: r.width, height: r.height)
+}
+
 // MARK: - Recording indicator (red dot pill, click to stop)
 
 final class RecordIndicator: NSPanel {
@@ -313,7 +378,7 @@ final class RecordIndicator: NSPanel {
 
     /// Fixed size: `NSHostingView.fittingSize` on a freshly built view reports zero,
     /// which produced a zero-sized (invisible) panel.
-    private static let size = NSSize(width: 248, height: 40)
+    private static let size = NSSize(width: 320, height: 56)
 
     init(source: String = "Screen") {
         self.source = source
@@ -333,9 +398,11 @@ final class RecordIndicator: NSPanel {
         hosting.frame = NSRect(origin: .zero, size: Self.size)
         contentView = hosting
 
+        // Top-centre: the eye already goes to the top of the screen, and it can't be
+        // confused with the menu-bar clock on the right.
         let screen = NSScreen.main ?? NSScreen.screens.first!
-        setFrame(NSRect(x: screen.frame.maxX - Self.size.width - 20,
-                        y: screen.frame.maxY - Self.size.height - 20,
+        setFrame(NSRect(x: screen.frame.midX - Self.size.width / 2,
+                        y: screen.frame.maxY - Self.size.height - 14,
                         width: Self.size.width, height: Self.size.height),
                  display: false)
     }
@@ -354,21 +421,21 @@ struct RecordIndicatorView: View {
     var body: some View {
         Button(action: onStop) {
             HStack(spacing: 6) {
-                Circle().fill(Color.red).frame(width: 9, height: 9)
+                Circle().fill(Color.red).frame(width: 11, height: 11)
                 Text("REC \(timeString)")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 15, weight: .bold))
                     .monospacedDigit()
                 Text(source)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
-                Text("tap to stop")
-                    .font(.system(size: 11))
+                Text("click to stop")
+                    .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
+            .padding(.horizontal, 18).padding(.vertical, 10)
             .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+            .overlay(Capsule().stroke(Color.red.opacity(0.45), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         }
         .buttonStyle(PressableStyle())
         .onReceive(timer) { _ in seconds += 1 }

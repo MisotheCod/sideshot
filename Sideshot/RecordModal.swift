@@ -198,8 +198,13 @@ final class WindowSelectionOverlay: NSWindow {
     override var canBecomeKey: Bool { true }
 
     func show() {
-        makeKeyAndOrderFront(nil)
+        // Activate first: an LSUIElement app is not frontmost when a hotkey fires,
+        // and a window ordered front before activation never becomes key.
         NSApp.activate(ignoringOtherApps: true)
+        makeKeyAndOrderFront(nil)
+        NSLog("SIDESHOT_WINDOWPICK active=%@ key=%@",
+              NSApp.isActive ? "YES" : "NO",
+              isKeyWindow ? "YES" : "NO")
         // A local mouse-moved monitor is the reliable way to drive the hover highlight:
         // it fires regardless of whether this borderless overlay ends up the key window.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
@@ -236,6 +241,10 @@ final class WindowSelectionView: NSView {
     /// and once from this view's own mouseUp.
     private var didPick = false
 
+    var largestWindow: SCWindow? {
+        windows.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+    }
+
     init(frame: NSRect, windows: [SCWindow], onPick: @escaping (SCWindow) -> Void) {
         self.windows = windows
         self.onPick = onPick
@@ -245,6 +254,18 @@ final class WindowSelectionView: NSView {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+
+    /// Sideshot is a menu-bar app, so it is almost never the active app when this
+    /// overlay appears. macOS turns the first click in an inactive window into an
+    /// activation click and swallows it unless the view opts in here — which is why
+    /// hover worked (tracking areas use .activeAlways) but clicking a window did nothing.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeKey()
+        // Deliberately no super: consuming the press stops AppKit from treating it
+        // as a bare activation click. mouseUp still arrives at this same view.
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -291,7 +312,12 @@ final class WindowSelectionView: NSView {
     }
 
     func click(at p: NSPoint) {
-        guard !didPick, let w = window(at: p) else { return }
+        guard !didPick else { return }
+        guard let w = window(at: p) else {
+            // Never fail silently: an unnoticed no-op reads as a broken app.
+            NSSound.beep()
+            return
+        }
         didPick = true
         onPick(w)
     }

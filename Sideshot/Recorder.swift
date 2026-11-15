@@ -24,7 +24,12 @@ final class Recorder: NSObject {
         guard !isRecording else { return }
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         let display = matchDisplay(screen, in: content.displays)
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        // Exclude Sideshot's own windows: the red recording border and the REC pill are
+        // on screen while recording and must never be baked into the video.
+        let mine = content.windows.filter {
+            $0.owningApplication?.processID == ProcessInfo.processInfo.processIdentifier
+        }
+        let filter = SCContentFilter(display: display, excludingWindows: mine)
         let scale = screen.backingScaleFactor
 
         let width: Int
