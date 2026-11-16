@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showOnboarding() }
         }
         logPermissionState()
+        runScrollRunIfRequested()
 
         #if DEBUG
         runSelfTestIfRequested()
@@ -573,6 +574,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
                     self.startBorderFollow()
                 }
             } catch { self.notifyError(error) }
+        }
+    }
+
+    // TEMPORARY test hook
+    private func runScrollRunIfRequested() {
+        guard let needle = UserDefaults.standard.string(forKey: "SIDESHOT_SCROLLRUN") else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            Task {
+                do {
+                    let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+                    guard let win = content.windows.first(where: {
+                        ($0.title ?? "").localizedCaseInsensitiveContains(needle) && $0.frame.width > 400
+                    }) else { sideLog.notice("scrollrun no-window"); NSApp.terminate(nil); return }
+                    let screen = NSScreen.main ?? NSScreen.screens.first!
+                    let img = try await ScrollCapture.shared.capture(window: win, screen: screen) { _ in }
+                    let rep = NSBitmapImageRep(cgImage: img)
+                    if let d = rep.representation(using: .png, properties: [:]) {
+                        try? d.write(to: URL(fileURLWithPath: "/tmp/scrollrun.png"))
+                    }
+                    sideLog.notice("scrollrun saved \(img.width, privacy: .public)x\(img.height, privacy: .public)")
+                } catch {
+                    sideLog.error("scrollrun failed \(error.localizedDescription, privacy: .public)")
+                }
+                NSApp.terminate(nil)
+            }
         }
     }
 

@@ -179,6 +179,8 @@ final class ScrollCapture {
         defer { warpCursor(to: savedCursor) }
         try? await Task.sleep(nanoseconds: 80_000_000)
 
+        await ensureFrontmost(window)
+
         // Always start from the top of the page, never from wherever the user left it.
         try await scrollToTop(window: window, screen: screen)
 
@@ -186,45 +188,52 @@ final class ScrollCapture {
             throw ScrollCaptureError.noContent
         }
 
-        let requested = Int(CGFloat(rawFirst.height) * scrollFraction)
+        let fullStep = Int(CGFloat(rawFirst.height) * scrollFraction)
+        var step = fullStep
 
-        // Probe one scroll. Two things come out of it: the real frame offset, and the
-        // number of rows at the frame's bottom edge that are fixed window chrome
-        // (rounded corner / shadow). Those rows never change when the page scrolls, and
-        // stitching them is what left a dark band at every join.
-        postScroll(direction: -1, pixels: requested, in: window)
-        try? await Task.sleep(nanoseconds: 260_000_000)
-        guard let rawSecond = try await settledFrame(window: window, screen: screen) else {
-            // Page fits the window — one frame is the whole thing.
-            guard let image = Stitcher(first: rawFirst).finish() else {
-                throw ScrollCaptureError.framesDidNotMatch
+        // Probe until a step produces a matchable overlap. A large step can overshoot
+        // (momentum) and leave no overlap at all — that is NOT the same as "the page
+        // fits", and treating it that way is what returned a single viewport.
+        var probedFirst: CGImage?
+        var probedSecond: CGImage?
+        var firstOffset = 0
+        var chrome = 0
+
+        for _ in 0..<4 {
+            postScroll(direction: -1, pixels: step, in: window)
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            guard let rawSecond = try await settledFrame(window: window, screen: screen) else { break }
+
+            if Self.nearlyIdentical(rawFirst, rawSecond) {
+                // Screen genuinely did not change: the page fits the window.
+                guard let image = Stitcher(first: rawFirst).finish() else {
+                    throw ScrollCaptureError.framesDidNotMatch
+                }
+                return image
             }
-            return image
-        }
 
-        if Self.nearlyIdentical(rawFirst, rawSecond) {
-            // Page fits the window: one frame is the whole thing.
-            guard let image = Stitcher(first: rawFirst).finish() else {
-                throw ScrollCaptureError.framesDidNotMatch
+            let c = min(24, bottomChromeRows(rawFirst, rawSecond))
+            let a = cropBottom(rawFirst, c)
+            let b = cropBottom(rawSecond, c)
+            if let off = Self.matchOffset(previous: a, next: b, expected: step),
+               off > 4, off < a.height - 4 {
+                probedFirst = a
+                probedSecond = b
+                firstOffset = off
+                chrome = c
+                break
             }
-            return image
+            step = max(120, step / 2)   // overshot: retry with less
         }
 
-        let chrome = bottomChromeRows(rawFirst, rawSecond)
-        let first = cropBottom(rawFirst, chrome)
-        var previous = cropBottom(rawSecond, chrome)
-        sideLog.notice("scroll chromeRows=\(chrome, privacy: .public)")
-
-        var stitcher = Stitcher(first: first)
-        progress(stitcher.height)
-
-        guard let firstOffset = Self.matchOffset(previous: first, next: previous, expected: requested),
-              firstOffset > 4 else {
-            // Nothing moved: the page fits the window.
-            guard let image = stitcher.finish() else { throw ScrollCaptureError.framesDidNotMatch }
-            return image
+        guard let firstFrame = probedFirst, let secondFrame = probedSecond else {
+            throw ScrollCaptureError.framesDidNotMatch
         }
-        stitcher.append(previous, advance: firstOffset)
+        var previous = secondFrame
+        sideLog.notice("scroll chromeRows=\(chrome, privacy: .public) firstStep=\(firstOffset, privacy: .public)")
+
+        var stitcher = Stitcher(first: firstFrame)
+        stitcher.append(secondFrame, advance: firstOffset)
         progress(stitcher.height)
 
         // At the bottom of a page the view rubber-bands, so frames keep differing by a
@@ -232,8 +241,11 @@ final class ScrollCapture {
         // keeps appending until it hits the size cap and fails.
         var weakSteps = 0
 
+        var currentStep = max(step, firstOffset)
+        var misses = 0
+
         for _ in 0..<maxFrames {
-            postScroll(direction: -1, pixels: requested, in: window)
+            postScroll(direction: -1, pixels: currentStep, in: window)
             try? await Task.sleep(nanoseconds: 240_000_000)
             guard let raw = try await settledFrame(window: window, screen: screen) else { break }
             let after = cropBottom(raw, chrome)
@@ -241,22 +253,38 @@ final class ScrollCapture {
             // Nothing changed on screen => we are at the end, whatever the matcher
             // claims. Checked before matching, because a self-similar page can produce
             // a confident false offset.
-            if Self.nearlyIdentical(previous, after) { break }
+            if Self.nearlyIdentical(previous, after) {
+                sideLog.notice("scroll stop=identical h=\(stitcher.height, privacy: .public)")
+                break
+            }
 
-            guard let offset = Self.matchOffset(previous: previous, next: after, expected: requested),
-                  offset > 4, offset < previous.height - 4 else { break }
+            guard let offset = Self.matchOffset(previous: previous, next: after, expected: currentStep),
+                  offset > 4, offset < previous.height - 4 else {
+                // Could not align: most likely this step overshot. Halve it and try
+                // again rather than stopping — one bad step must not truncate the page.
+                misses += 1
+                sideLog.notice("scroll miss=\(misses) step=\(currentStep) h=\(stitcher.height)")
+                currentStep = max(120, currentStep / 2)
+                if misses >= 5 {
+                    sideLog.notice("scroll stop=misses h=\(stitcher.height)")
+                    break
+                }
+                continue
+            }
+            misses = 0
 
-            if offset < requested / 3 {
+            if offset < currentStep / 3 {
                 weakSteps += 1
                 if weakSteps >= 2 { break }
             } else {
                 weakSteps = 0
             }
 
-            sideLog.notice("step req=\(requested, privacy: .public) got=\(offset, privacy: .public) h=\(stitcher.height, privacy: .public) weak=\(weakSteps, privacy: .public)")
+            sideLog.notice("step req=\(currentStep, privacy: .public) got=\(offset, privacy: .public) h=\(stitcher.height, privacy: .public) weak=\(weakSteps, privacy: .public)")
             stitcher.append(after, advance: offset)
             previous = after
             progress(stitcher.height)
+            currentStep = min(fullStep, currentStep + max(40, currentStep / 4))
             if stitcher.height > maxHeight { throw ScrollCaptureError.tooTall(maxHeight) }
             if stitcher.height * stitcher.width > maxPixels {
                 throw ScrollCaptureError.tooTall(maxHeight)
@@ -370,6 +398,19 @@ final class ScrollCapture {
 
     // MARK: - Scrolling
 
+    /// Make sure the target really owns the foreground before posting scrolls, and
+    /// confirm it afterwards. Scrolling a background window does nothing at all.
+    private func ensureFrontmost(_ window: SCWindow) async {
+        guard let pid = window.owningApplication?.processID else { return }
+        for _ in 0..<3 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return }
+            AXScroll.raiseWindow(window)
+            NSRunningApplication(processIdentifier: pid)?
+                .activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
     private func raise(window: SCWindow) {
         // Bring the owning app forward so it receives the synthetic scroll events.
         let pid = window.owningApplication?.processID
@@ -469,6 +510,41 @@ final class ScrollCapture {
         return n == 0 ? .greatestFiniteMagnitude : Double(total) / Double(n)
     }
 
+    /// Mean difference over the overlap, split into thirds, returning the WORST third.
+    /// A page with repeating sections can align beautifully in one band while being
+    /// wrong overall; averaging hides that, and the result is a duplicated block.
+    static func worstThirdScore(prev: Grid, next: Grid, offset: Int) -> Double {
+        let h = prev.h
+        let count = h - offset
+        guard count > 60 else { return .greatestFiniteMagnitude }
+        let third = count / 3
+        var worst = 0.0
+        for k in 0..<3 {
+            let lo = k * third
+            let hi = (k == 2) ? count : (k + 1) * third
+            var total = 0
+            var n = 0
+            var i = lo
+            while i < hi {
+                let pr = (offset + i) * prev.w * 3
+                let nr = i * next.w * 3
+                var x = 0
+                while x < prev.w {
+                    let p = pr + x * 3
+                    let q = nr + x * 3
+                    total += abs(Int(prev.data[p]) - Int(next.data[q]))
+                    total += abs(Int(prev.data[p + 1]) - Int(next.data[q + 1]))
+                    total += abs(Int(prev.data[p + 2]) - Int(next.data[q + 2]))
+                    n += 3
+                    x += 2
+                }
+                i += 2
+            }
+            worst = max(worst, n == 0 ? 999.0 : Double(total) / Double(n))
+        }
+        return worst
+    }
+
     /// How far the content moved between two frames, in pixels.
     static func matchOffset(previous: CGImage, next: CGImage, expected: Int? = nil) -> Int? {
         guard let a = grid(previous), let b = grid(next), a.w == b.w, a.h == b.h else { return nil }
@@ -510,6 +586,13 @@ final class ScrollCapture {
         let refined = search(max(minOverlap, coarse.offset - 5),
                              min(maxSearch, coarse.offset + 5), step: 1)
         guard let best = refined, best.score < 4.0 else { return nil }
+
+        // When the match disagrees with the scroll we asked for, it is either momentum
+        // or a false positive on repeating content. Demand that all thirds of the
+        // overlap agree before trusting it — that is what a repeated block fails.
+        if let e = expected, abs(best.offset - e) > max(48, e / 4) {
+            guard worstThirdScore(prev: a, next: b, offset: best.offset) < 7.0 else { return nil }
+        }
 
         // Periodic content (file lists, tables) can match near-perfectly at several
         // offsets. Among those, the one closest to how far we asked the page to move
