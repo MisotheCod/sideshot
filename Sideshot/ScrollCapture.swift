@@ -202,6 +202,14 @@ final class ScrollCapture {
             return image
         }
 
+        if Self.nearlyIdentical(rawFirst, rawSecond) {
+            // Page fits the window: one frame is the whole thing.
+            guard let image = Stitcher(first: rawFirst).finish() else {
+                throw ScrollCaptureError.framesDidNotMatch
+            }
+            return image
+        }
+
         let chrome = bottomChromeRows(rawFirst, rawSecond)
         let first = cropBottom(rawFirst, chrome)
         var previous = cropBottom(rawSecond, chrome)
@@ -230,6 +238,11 @@ final class ScrollCapture {
             guard let raw = try await settledFrame(window: window, screen: screen) else { break }
             let after = cropBottom(raw, chrome)
 
+            // Nothing changed on screen => we are at the end, whatever the matcher
+            // claims. Checked before matching, because a self-similar page can produce
+            // a confident false offset.
+            if Self.nearlyIdentical(previous, after) { break }
+
             guard let offset = Self.matchOffset(previous: previous, next: after, expected: requested),
                   offset > 4, offset < previous.height - 4 else { break }
 
@@ -240,7 +253,7 @@ final class ScrollCapture {
                 weakSteps = 0
             }
 
-            sideLog.debug("step req=\(requested, privacy: .public) got=\(offset, privacy: .public) h=\(stitcher.height, privacy: .public) weak=\(weakSteps, privacy: .public)")
+            sideLog.notice("step req=\(requested, privacy: .public) got=\(offset, privacy: .public) h=\(stitcher.height, privacy: .public) weak=\(weakSteps, privacy: .public)")
             stitcher.append(after, advance: offset)
             previous = after
             progress(stitcher.height)
@@ -292,6 +305,15 @@ final class ScrollCapture {
             if mean < 2.0 { rows += 1; y -= 1 } else { break }
         }
         return rows
+    }
+
+    /// True when two frames show the same thing. At the bottom of a page the view
+    /// stops moving, and a matcher comparing the page with itself will happily lock
+    /// onto a repeated section rhythm and invent a constant offset forever. That is
+    /// what made long captures loop.
+    private static func nearlyIdentical(_ a: CGImage, _ b: CGImage) -> Bool {
+        guard let ga = grid(a), let gb = grid(b), ga.w == gb.w, ga.h == gb.h else { return false }
+        return mismatch(prev: ga, next: gb, offset: 0, skipTop: 0) < 1.0
     }
 
     private func cropBottom(_ image: CGImage, _ rows: Int) -> CGImage {
