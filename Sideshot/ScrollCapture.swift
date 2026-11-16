@@ -35,9 +35,11 @@ final class ScrollCapture {
     static let shared = ScrollCapture()
     private init() {}
 
-    /// How much of the window we scroll past each step. Leaving overlap is what lets the
-    /// matcher find the seam; 0.78 is a compromise between speed and reliability.
-    private let scrollFraction: CGFloat = 0.78
+    /// How much of the window we scroll past each step. The leftover is the overlap the
+    /// matcher uses to align frames: too little and pages full of similar rows (file
+    /// lists, tables) match the wrong band, which duplicates a chunk of the page. 0.6
+    /// leaves ~40% of a viewport of context, which is enough to be unambiguous.
+    private let scrollFraction: CGFloat = 0.6
     private let maxFrames = 120
     /// In device pixels. A Retina display doubles the point height, so the old 30k
     /// cap tripped on pages only ~15k points tall.
@@ -238,6 +240,7 @@ final class ScrollCapture {
                 weakSteps = 0
             }
 
+            sideLog.debug("step req=\(requested, privacy: .public) got=\(offset, privacy: .public) h=\(stitcher.height, privacy: .public) weak=\(weakSteps, privacy: .public)")
             stitcher.append(after, advance: offset)
             previous = after
             progress(stitcher.height)
@@ -477,21 +480,37 @@ final class ScrollCapture {
             return (bestOffset, bestScore)
         }
 
-        // We posted a known number of pixels, and browsers honour it closely. Searching
-        // near that first avoids latching onto the wrong repeat of periodic content
-        // (table rows, lists) — which is what shifts a seam by a whole row.
-        if let e = expected, e > minOverlap {
-            let pad = max(24, e / 6)
-            let lo = max(minOverlap, e - pad)
-            let hi = min(maxSearch, e + pad)
-            // Fine 1px sweep: a coarse step can skip the exact offset on content where
-            // every misalignment scores similarly, and one row off is a visible seam.
-            if let best = search(lo, hi, step: 1), best.score < 4.0 { return best.offset }
-        }
+        // Full range, then refine at 1px. Restricting the search to a window around the
+        // requested scroll looked like an optimisation but was wrong: momentum makes a
+        // page scroll FURTHER than the delta we posted, so the true offset fell outside
+        // the window and the best in-window guess duplicated a band of the page.
+        guard let coarse = search(minOverlap, maxSearch, step: 3) else { return nil }
+        let refined = search(max(minOverlap, coarse.offset - 5),
+                             min(maxSearch, coarse.offset + 5), step: 1)
+        guard let best = refined, best.score < 4.0 else { return nil }
 
-        // Tight threshold: a fuzzy match is what leaves a visible line at the seam.
-        if let best = search(minOverlap, maxSearch, step: 3), best.score < 4.0 { return best.offset }
-        return nil
+        // Periodic content (file lists, tables) can match near-perfectly at several
+        // offsets. Among those, the one closest to how far we asked the page to move
+        // is the real one.
+        if let e = expected {
+            var candidates: [(offset: Int, score: Double)] = []
+            var o = minOverlap
+            while o <= maxSearch {
+                let s = min(mismatch(prev: a, next: b, offset: o, skipTop: 0),
+                            mismatch(prev: a, next: b, offset: o, skipTop: 90))
+                if s < max(2.0, best.score * 1.5) { candidates.append((o, s)) }
+                o += 2
+            }
+            // Only break ties between effectively identical scores. Preferring the
+            // requested offset over a clearly better match would duplicate a band
+            // whenever momentum carried the page further than we asked.
+            let tied = candidates.filter { $0.score <= best.score + 0.1 }
+            if tied.count > 1,
+               let closest = tied.min(by: { abs($0.offset - e) < abs($1.offset - e) }) {
+                return closest.offset
+            }
+        }
+        return best.offset
     }
 }
 

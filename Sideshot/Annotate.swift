@@ -131,10 +131,13 @@ struct Mapping {
         CGRect(x: r.minX * scale + dx, y: r.minY * scale + dy, width: r.width * scale, height: r.height * scale)
     }
     func toImage(_ p: CGPoint) -> CGPoint { CGPoint(x: (p.x - dx) / scale, y: (p.y - dy) / scale) }
-    static func make(img: CGSize, view: CGSize) -> Mapping {
-        let s = min(view.width / max(1, img.width), view.height / max(1, img.height))
+    static func make(img: CGSize, view: CGSize, zoom: CGFloat = 1, pan: CGSize = .zero) -> Mapping {
+        let fit = min(view.width / max(1, img.width), view.height / max(1, img.height))
+        let s = fit * max(0.05, zoom)
         let w = img.width * s, h = img.height * s
-        return Mapping(scale: s, dx: (view.width - w) / 2, dy: (view.height - h) / 2)
+        return Mapping(scale: s,
+                       dx: (view.width - w) / 2 + pan.width,
+                       dy: (view.height - h) / 2 + pan.height)
     }
 }
 
@@ -181,6 +184,11 @@ struct AnnotateView: View {
     @State private var hoveredAnnotationID: UUID?
     @State private var selectedTextBlockID: UUID?
     @State private var draggingID: UUID?
+    @State private var zoom: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var viewSize: CGSize = .zero
+    @State private var magnificationBase: CGFloat = 0
+    @State private var scrollMonitor: Any?
 
     init(image: NSImage, saveDirectory: URL, onClose: @escaping () -> Void) {
         self.image = image
@@ -196,12 +204,31 @@ struct AnnotateView: View {
 
     private var imgSize: CGSize { CGSize(width: cgImage.width, height: cgImage.height) }
 
+    private func setZoom(_ z: CGFloat) {
+        zoom = min(8, max(0.25, z))
+        sideLog.debug("annotate zoom=\(Double(self.zoom), privacy: .public)")
+        if zoom <= 1.001 { pan = .zero }   // back to fit: recentre
+        clampPan()
+    }
+
+    /// Keep the image from being dragged off into empty space.
+    private func clampPan() {
+        guard viewSize.width > 1, viewSize.height > 1 else { return }
+        let fit = min(viewSize.width / max(1, imgSize.width),
+                      viewSize.height / max(1, imgSize.height))
+        let s = fit * zoom
+        let maxX = max(0, (imgSize.width * s - viewSize.width) / 2)
+        let maxY = max(0, (imgSize.height * s - viewSize.height) / 2)
+        pan.width = min(maxX, max(-maxX, pan.width))
+        pan.height = min(maxY, max(-maxY, pan.height))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
 
             GeometryReader { geo in
-                let m = Mapping.make(img: imgSize, view: geo.size)
+                let m = Mapping.make(img: imgSize, view: geo.size, zoom: zoom, pan: pan)
                 ZStack {
                     Color.black.opacity(0.78)
 
@@ -260,6 +287,17 @@ struct AnnotateView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 .contentShape(Rectangle())
+                .onAppear { viewSize = geo.size }
+                .onChange(of: geo.size) { _, s in viewSize = s; clampPan() }
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { v in
+                            if magnificationBase == 0 { magnificationBase = zoom }
+                            zoom = min(8, max(0.25, magnificationBase * v))
+                            clampPan()
+                        }
+                        .onEnded { _ in magnificationBase = 0 }
+                )
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let loc):
@@ -288,7 +326,22 @@ struct AnnotateView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 540)
-        .onAppear { loadLiveText() }
+        .onAppear {
+            loadLiveText()
+            if scrollMonitor == nil {
+                scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { e in
+                    // Only intercept when zoomed in; at fit there is nothing to pan.
+                    guard zoom > 1.001 else { return e }
+                    pan.width += e.scrollingDeltaX
+                    pan.height += e.scrollingDeltaY
+                    clampPan()
+                    return nil
+                }
+            }
+        }
+        .onDisappear {
+            if let m = scrollMonitor { NSEvent.removeMonitor(m); scrollMonitor = nil }
+        }
         .onKeyPress(keys: Set(["v", "a", "l", "r", "o", "h", "p", "t", "c", "b"])) { press in
             if let c = press.characters.first {
                 for t in AnnoTool.allCases where t.key.lowercased() == String(c).lowercased() { tool = t }
@@ -350,6 +403,25 @@ struct AnnotateView: View {
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(strokeWidth == w ? Color.accentColor : Color.clear))
                 .help("Stroke width")
+            }
+            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 22)
+            HStack(spacing: 4) {
+                Button { setZoom(zoom / 1.25) } label: { Image(systemName: "minus.magnifyingglass") }
+                    .keyboardShortcut("-", modifiers: .command)
+                    .disabled(zoom <= 0.26)
+                    .help("Zoom out (⌘−)")
+                Button { setZoom(1) } label: {
+                    Text("\(Int((zoom * 100).rounded()))%")
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .frame(width: 46)
+                }
+                .keyboardShortcut("0", modifiers: .command)
+                .help("Fit to window (⌘0)")
+                Button { setZoom(zoom * 1.25) } label: { Image(systemName: "plus.magnifyingglass") }
+                    .keyboardShortcut("=", modifiers: .command)
+                    .disabled(zoom >= 8)
+                    .help("Zoom in (⌘+)")
             }
             Spacer()
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
