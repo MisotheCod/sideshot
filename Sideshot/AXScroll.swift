@@ -108,24 +108,6 @@ enum AXScroll {
         return best
     }
 
-    /// Bring one specific window to the front of its app. `activate` alone only brings
-    /// the app forward — another of its windows can stay on top, and wheel events then
-    /// scroll the wrong thing.
-    @discardableResult
-    static func raiseWindow(_ window: SCWindow) -> Bool {
-        guard AXIsProcessTrusted(), let pid = window.owningApplication?.processID else { return false }
-        let app = AXUIElementCreateApplication(pid)
-        guard let windows = copy(app, kAXWindowsAttribute) as? [AXUIElement] else { return false }
-        let wanted = window.title ?? ""
-        for w in windows {
-            if let t = copy(w, kAXTitleAttribute) as? String, t == wanted {
-                AXUIElementPerformAction(w, kAXRaiseAction as CFString)
-                return true
-            }
-        }
-        return false
-    }
-
     /// The vertical scroll bar of the window's main scroll area, if it has a writable one.
     static func target(for window: SCWindow) -> Target? {
         guard AXIsProcessTrusted(), let pid = window.owningApplication?.processID else { return nil }

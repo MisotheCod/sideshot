@@ -270,7 +270,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverD
     private func presentSelection(recording: Bool) {
         guard selectionWindow == nil else { return }
         recordingSelection = recording
-        let win = SelectionOverlayWindow { [weak self] rect, screen in
+
+        // Grab the frame FIRST, then show the overlay with that frame inside it, so the
+        // user selects against a frozen picture rather than a moving screen.
+        Task { [weak self] in
+            guard let self else { return }
+            let still = try? await CaptureEngine.shared.captureMainDisplay()
+            await MainActor.run {
+                self.selectionWindow = nil
+                self.showSelectionOverlay(frozen: still?.image)
+            }
+        }
+    }
+
+    private func showSelectionOverlay(frozen: CGImage?) {
+        guard selectionWindow == nil else { return }
+        let win = SelectionOverlayWindow(frozen: frozen) { [weak self] rect, screen in
             guard let self else { return }
             self.selectionWindow = nil
             self.updateEscState()

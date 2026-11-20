@@ -6,7 +6,7 @@ final class SelectionOverlayWindow: NSWindow {
     private let onComplete: (CGRect, NSScreen) -> Void
     private let targetScreen: NSScreen
 
-    init(onComplete: @escaping (CGRect, NSScreen) -> Void) {
+    init(frozen: CGImage?, onComplete: @escaping (CGRect, NSScreen) -> Void) {
         self.onComplete = onComplete
         self.targetScreen = NSScreen.main ?? NSScreen.screens.first!
         let frame = targetScreen.frame
@@ -21,6 +21,7 @@ final class SelectionOverlayWindow: NSWindow {
         isReleasedWhenClosed = false
 
         let view = SelectionView(frame: frame,
+                                 frozen: frozen,
                                  onCancel: { [weak self] in self?.close() },
                                  onComplete: { [weak self] rect in
                                      guard let self else { return }
@@ -41,10 +42,13 @@ final class SelectionOverlayWindow: NSWindow {
 final class SelectionView: NSView {
     private let onCancel: () -> Void
     private let onComplete: (CGRect) -> Void
+    private let frozen: CGImage?
     private var startPoint: NSPoint?
     private var currentPoint: NSPoint = .zero
 
-    init(frame: NSRect, onCancel: @escaping () -> Void, onComplete: @escaping (CGRect) -> Void) {
+    init(frame: NSRect, frozen: CGImage?,
+         onCancel: @escaping () -> Void, onComplete: @escaping (CGRect) -> Void) {
+        self.frozen = frozen
         self.onCancel = onCancel
         self.onComplete = onComplete
         super.init(frame: frame)
@@ -110,6 +114,20 @@ final class SelectionView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let b = bounds
+
+        // Paint the still taken when the hotkey fired. Without this the window is just
+        // a translucent sheet over a live screen, so windows keep updating mid-selection
+        // instead of freezing the way the system screenshot tool does.
+        if let frozen, let ctx = NSGraphicsContext.current?.cgContext {
+            ctx.saveGState()
+            ctx.interpolationQuality = .high
+            // This view is flipped, so undo the flip for the image.
+            ctx.translateBy(x: 0, y: b.height)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(frozen, in: CGRect(origin: .zero, size: b.size))
+            ctx.restoreGState()
+        }
+
         NSColor.black.withAlphaComponent(0.35).setFill()
         if let r = activeRect {
             NSBezierPath(rect: NSRect(x: 0, y: 0, width: b.width, height: r.minY)).fill()
