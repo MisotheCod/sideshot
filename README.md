@@ -28,18 +28,24 @@ Sideshot fixes the middle part. A capture doesn't become a file you have to hunt
 
 - **Menu-bar app** — no Dock icon; lives in the status bar.
 - **Global hotkeys**
-  - `⌘⇧4` — capture an area (drag a clean rectangle, no crosshairs)
+  - `⌘⇧4` — capture an area. The display freezes the moment the hotkey fires, so nothing moves underneath your selection
   - `⌘⇧3` — capture the full screen
-  - `⌘⇧5` — record (screen / window / area)
+  - `⌘⇧5` — one picker, two tabs: **Screenshot** or **Record**, each with screen / window / area
+  - `⌘⇧6` — scroll a long page into one tall image *(experimental — see below)*
   - `Esc` — cancel any in-progress capture or recording
 - **Window capture** — every window dims, the one under your cursor lights up, click to snap it.
 - **Floating side stack** — results stack on the screen edge (newest at the bottom). Hover to **Copy** or **Save**; drag a card out to export it anywhere; double-click for a full preview.
 - **Annotate** — double-click any screenshot to mark it up before sharing: selector, arrow, line, rectangle, ellipse, highlighter, freehand pen, text, **callout** (label + leader arrow), and blur (for redacting sensitive bits). Adjustable colors and three stroke widths, drag-to-move with snapping to the image centre and edges, corner resize handles, delete key, undo/redo, and live pixelation.
 - **Live Text** — the screenshot is read with Vision, so you can select and copy text straight out of the image, and click links to open them.
-- **Recording** — stops into the stack as an unsaved card (nothing is saved until you say so).
-- **QuickTime-style editor** — scrub and trim recordings on one strip, then **Save As…**.
+- **Annotation zoom** — 25% to 800%, pinch or `⌘−`/`⌘=`/`⌘0`, with scroll-to-pan. Zooming a deadline out of a screenshot beats squinting.
+- **Recording** — stops into the stack as an unsaved card (nothing is saved until you say so). While recording, the window keeps a red border with a **notch** that holds the timer, the source, and a **Stop** button.
+- **QuickTime-style editor** — scrub and trim recordings on one strip, then **Save As…**. Pressing play loops the trimmed range, so you see exactly what you're keeping.
 - **Naming** — `SS_MMMddyy_HH.mm.png` / `SR_MMMddyy_HH.mm.mov` (e.g. `SS_Oct1826_13.05.png`), with a `_2` suffix on collisions.
 - **Choose your save location** from the menu bar.
+
+### Full-page capture (experimental)
+
+`⌘⇧6` scrolls a window and stitches the frames into one tall image. It works on static pages, but pages with scroll-triggered animations or repeating sections can defeat the frame matching — you may get a duplicated block or a capture that stops early. It is being reworked; everything else in the app is stable.
 
 ## Privacy
 
